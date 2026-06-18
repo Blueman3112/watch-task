@@ -115,9 +115,36 @@ fun RadarSpiralScreen(
         label = "breathing_urgent"
     )
 
-    val spiralA = 42f
-    val spiralB = 14f
+    // ── 螺旋有机生长算法 ──
+    // 任务越多螺旋越大，像自然生长的有机体
+    // N=1: 胚芽期(小) → N=4~5: 生长期 → N=8+: 成熟期(与原始外观一致)
+    val taskCount = tasks.size
+    val growthFactor = ((taskCount - 1).toFloat() / 7f).coerceIn(0f, 1f)
+
+    val spiralAAnimatable = remember {
+        Animatable(20f + 22f * ((tasks.size - 1).toFloat() / 7f).coerceIn(0f, 1f))
+    }
+    val spiralBAnimatable = remember {
+        Animatable(8f + 6f * ((tasks.size - 1).toFloat() / 7f).coerceIn(0f, 1f))
+    }
     val thetaMultiplier = 1.1f
+
+    // 任务数变化时 → 螺旋体弹性生长/收缩动画
+    LaunchedEffect(taskCount) {
+        val factor = ((taskCount - 1).toFloat() / 7f).coerceIn(0f, 1f)
+        launch {
+            spiralAAnimatable.animateTo(
+                20f + 22f * factor,
+                spring(dampingRatio = 0.6f, stiffness = 120f)
+            )
+        }
+        launch {
+            spiralBAnimatable.animateTo(
+                8f + 6f * factor,
+                spring(dampingRatio = 0.6f, stiffness = 120f)
+            )
+        }
+    }
 
     fun adjustCameraForCursor(targetIdx: Int) {
         coroutineScope.launch {
@@ -220,7 +247,7 @@ fun RadarSpiralScreen(
                                 val virtualIndex = i - progress
                                 if (virtualIndex <= 0f) continue
                                 val theta = virtualIndex * thetaMultiplier
-                                val r = spiralA + spiralB * theta
+                                val r = spiralAAnimatable.value + spiralBAnimatable.value * theta
                                 val pos = Offset(centerX + r * cos(theta), centerY + r * sin(theta))
                                 if ((tapOffset - pos).getDistance() < 25f) {
                                     view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
@@ -240,6 +267,10 @@ fun RadarSpiralScreen(
         val edgeFadeZone = 50f
         val eProgress = entranceProgress.value
         val nativeCanvas = drawContext.canvas.nativeCanvas
+
+        // 读取当前动画值
+        val spiralA = spiralAAnimatable.value
+        val spiralB = spiralBAnimatable.value
 
         val helperPath = androidx.compose.ui.graphics.Path()
         val steps = 100
@@ -279,7 +310,7 @@ fun RadarSpiralScreen(
             val taskColor = priorityColor(currentTask.priority)
             val currentBreathing = if (isAlertTask) breathingUrgent else breathingBase
 
-            val baseSize = 11f
+            val baseSize = 14f - growthFactor * 3f  // 少任务时节点大，多任务时节点紧凑
             val sizeScale = (1.2f - (virtualIndex * 0.08f)).coerceIn(0.5f, 1.2f)
             val nodeRadius = (if (isHovered) 16f else baseSize * sizeScale) * (if (isHovered) 1f else currentBreathing)
 
