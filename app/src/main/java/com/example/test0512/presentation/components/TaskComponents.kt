@@ -86,7 +86,7 @@ fun RadarSpiralScreen(
     var rotaryAccumulator by remember { mutableFloatStateOf(0f) }
 
     // ── 双色状态系统 ──
-    val colorNormal = Color(0xFF4CAF50)   // 绿色：正常状态（待处理/长远）
+    val colorNormal = Color(0xFF4DB6AC)   // 青色：正常状态（待处理/长远）
     val colorAlert = Color(0xFFFF5252)    // 红色：警戒状态（紧急/重要）
     val colorNeutral = Color(0xFF78909C)  // 中性灰：引导线等辅助元素
 
@@ -588,8 +588,8 @@ fun TaskDetailScreen(
             verticalArrangement = Arrangement.Center
         ) {
             val isAlert = task.priority == TaskPriority.EMERGENCY || task.priority == TaskPriority.IMPORTANT
-            val detailBgColor = if (isAlert) Color(0xFF6A1B1A) else Color(0xFF1B5E20).copy(alpha = 0.6f)
-            val detailFgColor = if (isAlert) Color(0xFFFFCDD2) else Color(0xFFA5D6A7)
+            val detailBgColor = if (isAlert) Color(0xFF6A1B1A) else Color(0xFF004D40).copy(alpha = 0.6f)
+            val detailFgColor = if (isAlert) Color(0xFFFFCDD2) else Color(0xFF4DB6AC)
 
             Box(
                 modifier = Modifier
@@ -645,7 +645,7 @@ fun TaskDetailScreen(
                     }
                 }
 
-                CompactActionButton("完成", if (isAlert) Color(0xFFC62828) else Color(0xFF2E7D32), Color.White, Modifier.weight(1f)) { onComplete() }
+                CompactActionButton("完成", if (isAlert) Color(0xFFC62828) else Color(0xFF00796B), Color.White, Modifier.weight(1f)) { onComplete() }
             }
         }
     }
