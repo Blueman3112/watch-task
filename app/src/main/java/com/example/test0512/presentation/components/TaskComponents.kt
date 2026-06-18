@@ -105,8 +105,8 @@ fun RadarSpiralScreen(
         label = "breathing_urgent"
     )
 
-    val spiralA = 42f
-    val spiralB = 14f
+    val spiralA = 38f
+    val spiralB = 10f
     val thetaMultiplier = 1.1f
 
     fun adjustCameraForCursor(targetIdx: Int) {
