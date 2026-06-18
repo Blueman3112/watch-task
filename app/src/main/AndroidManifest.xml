@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AndroidManifest.xml (清单文件) 作用说明：
+    1. 核心定义：它是 Android 系统的“说明书”，告诉系统这个应用叫什么、图标是什么。
+    2. 组件注册：所有的 Activity (界面)、Service (服务) 等组件都必须在这里注册才能运行。
+    3. 权限管理：声明应用运行所需的系统权限（如访问网络、传感器等）。
+    4. 硬件特性：声明应用依赖的硬件（如本例中的手表特性）。
+    5. 入口声明：指定用户点击图标时，首先启动哪一个界面。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 权限声明：允许程序在屏幕关闭后后台进程仍然运行，防止 CPU 进入休眠状态 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 硬件特性声明：指明这是一个 Wear OS（手表）应用，系统会据此在应用商店进行过滤 -->
+    <uses-feature android:name="android.hardware.type.watch" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault">
+        
+        <!-- Wear OS 必须库：声明应用依赖于 Google 的 Wearable 共享库 -->
+        <uses-library
+            android:name="com.google.android.wearable"
+            android:required="true" />
+            
+        <!-- 元数据：standalone="true" 表示该应用是一个独立的手表应用，不需要手机端配合也能工作 -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <!-- Activity (活动/界面) 声明：.presentation.MainActivity 是具体的代码路径 -->
+        <!-- android:exported="true" 表示允许外部系统（如启动器）启动这个 Activity -->
+        <activity
+            android:name=".presentation.MainActivity"
+            android:exported="true">
+
+            <!-- 意图过滤器：定义该组件的功能 -->
+            <intent-filter>
+                <!-- MAIN 动作：表示这是程序的入口点 -->
+                <action android:name="android.intent.action.MAIN" />
+                <!-- LAUNCHER 类别：表示该应用的图标会显示在系统的应用列表（启动器）中 -->
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
