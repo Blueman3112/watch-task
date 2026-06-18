@@ -47,6 +47,7 @@ import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
 import androidx.wear.compose.foundation.rotary.rotaryScrollable
 import com.example.test0512.model.RadarTask
 import com.example.test0512.model.TaskPriority
+import com.example.test0512.model.TaskSource
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.max
@@ -84,7 +85,16 @@ fun RadarSpiralScreen(
 
     var rotaryAccumulator by remember { mutableFloatStateOf(0f) }
 
-    val baseTeal = Color(0xFF4DB6AC)
+    // ── 双色状态系统 ──
+    val colorNormal = Color(0xFF4CAF50)   // 绿色：正常状态（待处理/长远）
+    val colorAlert = Color(0xFFFF5252)    // 红色：警戒状态（紧急/重要）
+    val colorNeutral = Color(0xFF78909C)  // 中性灰：引导线等辅助元素
+
+    // 根据优先级返回对应颜色
+    fun priorityColor(priority: TaskPriority): Color = when (priority) {
+        TaskPriority.EMERGENCY, TaskPriority.IMPORTANT -> colorAlert
+        TaskPriority.REGULAR, TaskPriority.LONG_TERM -> colorNormal
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -241,7 +251,7 @@ fun RadarSpiralScreen(
             val y = centerY + r * sin(t).toFloat()
             if (s == 0) helperPath.moveTo(x, y) else helperPath.lineTo(x, y)
         }
-        drawPath(helperPath, color = baseTeal.copy(alpha = 0.08f), style = Stroke(width = 1f))
+        drawPath(helperPath, color = colorNeutral.copy(alpha = 0.06f), style = Stroke(width = 1f))
 
         if (tasks.isEmpty()) return@Canvas
 
@@ -265,8 +275,9 @@ fun RadarSpiralScreen(
             val isHovered = isTopMode && i == topCursorIndex
             
             val currentTask = tasks[i]
-            val isEmergency = currentTask.priority == TaskPriority.EMERGENCY
-            val currentBreathing = if (isEmergency) breathingUrgent else breathingBase
+            val isAlertTask = currentTask.priority == TaskPriority.EMERGENCY || currentTask.priority == TaskPriority.IMPORTANT
+            val taskColor = priorityColor(currentTask.priority)
+            val currentBreathing = if (isAlertTask) breathingUrgent else breathingBase
 
             val baseSize = 11f
             val sizeScale = (1.2f - (virtualIndex * 0.08f)).coerceIn(0.5f, 1.2f)
@@ -275,23 +286,46 @@ fun RadarSpiralScreen(
             val distanceAlpha = (0.8f - (virtualIndex * 0.06f)).coerceIn(0.1f, 0.8f)
             val finalAlpha = if (isTopMode) (if (isHovered) 1f else 0.05f) else distanceAlpha * edgeFadeFactor * entranceFactor
 
-            val nodeColor = if (isHovered) Color.White else baseTeal.copy(alpha = finalAlpha)
+            val nodeColor = if (isHovered) Color.White else taskColor.copy(alpha = finalAlpha)
 
-            if (isEmergency) {
+            // 警戒任务（紧急/重要）显示红色脉冲环
+            if (isAlertTask) {
                 drawCircle(
-                    color = (if (isHovered) Color.White else baseTeal).copy(alpha = finalAlpha * 0.4f * pulseScale), 
-                    radius = nodeRadius * 2.2f, 
+                    color = (if (isHovered) Color.White else colorAlert).copy(alpha = finalAlpha * 0.4f * pulseScale),
+                    radius = nodeRadius * 2.2f,
                     center = pos,
                     style = Stroke(width = 1.5.dp.toPx())
                 )
             }
+
+            // 来源微标记：日历任务加细外环，微信任务加小脉冲点
+            when (currentTask.source) {
+                TaskSource.CALENDAR -> {
+                    drawCircle(
+                        color = taskColor.copy(alpha = finalAlpha * 0.5f),
+                        radius = nodeRadius * 1.6f,
+                        center = pos,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                }
+                TaskSource.WECHAT_IMPORT -> {
+                    drawCircle(
+                        color = taskColor.copy(alpha = finalAlpha * 0.8f),
+                        radius = 3f,
+                        center = Offset(pos.x + nodeRadius + 4f, pos.y - nodeRadius + 2f)
+                    )
+                }
+                else -> { /* MANUAL: 无额外标记 */ }
+            }
+
             drawCircle(color = nodeColor, radius = nodeRadius, center = pos)
         }
 
         if (isTopMode) {
             tasks.getOrNull(topCursorIndex)?.let { hoveredTask ->
-                val priorityColor = if (hoveredTask.priority == TaskPriority.EMERGENCY) Color(0xFFFF5252) else baseTeal
-                val prioLayout = textMeasurer.measure("· ${hoveredTask.priority.label} ·", TextStyle(color = priorityColor, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                val hoveredColor = priorityColor(hoveredTask.priority)
+                val sourceLabel = " ${hoveredTask.source.icon}"
+                val prioLayout = textMeasurer.measure("· ${hoveredTask.priority.label}$sourceLabel ·", TextStyle(color = hoveredColor, fontSize = 12.sp, fontWeight = FontWeight.Bold))
                 drawText(prioLayout, topLeft = Offset(centerX - prioLayout.size.width / 2f, 24f))
 
                 val rArc = maxScreenRadius - 32f
@@ -311,10 +345,13 @@ fun RadarSpiralScreen(
                 drawText(topTextLayout, topLeft = Offset(centerX - topTextLayout.size.width / 2f, centerY - topTextLayout.size.height / 2f))
             }
         } else {
-            val coreRed = Color(0xFFFF5252)
-            drawCircle(color = coreRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
+            // 中心核心球颜色：跟随最高优先级任务联动
+            val topTask = tasks.firstOrNull()
+            val coreColor = if (topTask != null) priorityColor(topTask.priority) else colorNormal
+            drawCircle(color = coreColor.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
             drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
-            drawCircle(color = coreRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * breathingUrgent), center = Offset(centerX, centerY))
+            val coreBreathing = if (topTask?.priority == TaskPriority.EMERGENCY || topTask?.priority == TaskPriority.IMPORTANT) breathingUrgent else breathingBase
+            drawCircle(color = coreColor.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * coreBreathing), center = Offset(centerX, centerY))
         }
     }
 }
@@ -550,17 +587,18 @@ fun TaskDetailScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            val isAlert = task.priority == TaskPriority.EMERGENCY || task.priority == TaskPriority.IMPORTANT
+            val detailBgColor = if (isAlert) Color(0xFF6A1B1A) else Color(0xFF1B5E20).copy(alpha = 0.6f)
+            val detailFgColor = if (isAlert) Color(0xFFFFCDD2) else Color(0xFFA5D6A7)
+
             Box(
                 modifier = Modifier
-                    .background(
-                        color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFF6A1B1A) else Color(0xFF004D40).copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                    .background(color = detailBgColor, shape = RoundedCornerShape(10.dp))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
                 BasicText(
-                    text = "${task.priority.label} · ${task.time}",
-                    style = TextStyle(color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFFFFCDD2) else Color(0xFF4DB6AC), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    text = "${task.source.icon} ${task.priority.label} · ${task.time}",
+                    style = TextStyle(color = detailFgColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 )
             }
             
@@ -607,7 +645,7 @@ fun TaskDetailScreen(
                     }
                 }
 
-                CompactActionButton("完成", Color(0xFF00796B), Color.White, Modifier.weight(1f)) { onComplete() }
+                CompactActionButton("完成", if (isAlert) Color(0xFFC62828) else Color(0xFF2E7D32), Color.White, Modifier.weight(1f)) { onComplete() }
             }
         }
     }
