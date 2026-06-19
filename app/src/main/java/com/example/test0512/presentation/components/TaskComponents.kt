@@ -74,10 +74,34 @@ fun RadarSpiralScreen(
 
     val focusRequester = remember { FocusRequester() }
 
-    val entranceProgress = remember { Animatable(0f) }
+    // ── 每个任务独立的入场动画（替代全局 entranceProgress）──
+    val taskEntrances = remember { mutableMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    var isReady by remember { mutableStateOf(false) }
+
+    // 监听任务列表变化，为新任务创建入场动画
     LaunchedEffect(Unit) {
-        entranceProgress.animateTo(1f, tween(1600, easing = LinearEasing))
-        focusRequester.requestFocus()
+        snapshotFlow { tasks.toList() }.collect { currentTasks ->
+            for (task in currentTasks) {
+                if (task.id !in taskEntrances) {
+                    val anim = Animatable(0f)
+                    taskEntrances[task.id] = anim
+                    // 不同来源 → 不同入场动画风格（节奏区分）
+                    val animSpec: AnimationSpec<Float> = when (task.source) {
+                        TaskSource.CALENDAR -> tween(700, easing = FastOutSlowInEasing)  // 平稳滑入
+                        TaskSource.MANUAL -> tween(500, easing = FastOutSlowInEasing)    // 中等速度
+                        TaskSource.WECHAT_IMPORT -> tween(300, easing = EaseOutBack)     // 快速弹入
+                    }
+                    launch { anim.animateTo(1f, animSpec) }
+                    if (!isReady) {
+                        isReady = true
+                        focusRequester.requestFocus()
+                    }
+                }
+            }
+            // 清理已移除任务的动画
+            val currentIds = currentTasks.map { it.id }.toSet()
+            taskEntrances.keys.retainAll(currentIds)
+        }
     }
 
     var isTopMode by remember { mutableStateOf(false) }
@@ -159,7 +183,7 @@ fun RadarSpiralScreen(
     }
 
     val unifiedScrollState = rememberScrollableState { delta ->
-        if (entranceProgress.value < 1f) return@rememberScrollableState 0f
+        if (!isReady) return@rememberScrollableState 0f
         if (isTopMode) {
             rotaryAccumulator += delta
             val threshold = 40f
@@ -204,7 +228,7 @@ fun RadarSpiralScreen(
                 detectTapGestures(
                     onPress = { focusRequester.requestFocus() },
                     onLongPress = { tapOffset ->
-                        if (entranceProgress.value < 1f) return@detectTapGestures
+                        if (!isReady) return@detectTapGestures
                         
                         val centerX = size.width / 2f
                         val centerY = size.height / 2f
@@ -222,7 +246,7 @@ fun RadarSpiralScreen(
                         }
                     },
                     onTap = { tapOffset ->
-                        if (entranceProgress.value < 1f) return@detectTapGestures
+                        if (!isReady) return@detectTapGestures
                         val centerX = size.width / 2f
                         val centerY = size.height / 2f
                         val progress = scrollOffset.value
@@ -265,7 +289,6 @@ fun RadarSpiralScreen(
         val progress = scrollOffset.value
         val maxScreenRadius = size.width / 2f
         val edgeFadeZone = 50f
-        val eProgress = entranceProgress.value
         val nativeCanvas = drawContext.canvas.nativeCanvas
 
         // 读取当前动画值
@@ -289,10 +312,11 @@ fun RadarSpiralScreen(
         for (i in (tasks.size - 1) downTo 1) {
             val virtualIndex = i - progress
             if (virtualIndex <= 0f) continue
-            val delayI = (i - 1) * 0.08f
-            val rawP = (eProgress - delayI) / 0.45f
-            val entranceFactor = FastOutSlowInEasing.transform(rawP.coerceIn(0f, 1f))
-            if (entranceFactor <= 0f) continue
+
+            // 每个任务独立的入场进度
+            val currentTask = tasks[i]
+            val entranceFactor = taskEntrances[currentTask.id]?.value ?: 0f
+            if (entranceFactor <= 0.01f) continue
 
             val targetTheta = virtualIndex * thetaMultiplier
             val currentTheta = entranceFactor * targetTheta
@@ -305,7 +329,6 @@ fun RadarSpiralScreen(
             val pos = Offset(x, y)
             val isHovered = isTopMode && i == topCursorIndex
             
-            val currentTask = tasks[i]
             val isAlertTask = currentTask.priority == TaskPriority.EMERGENCY || currentTask.priority == TaskPriority.IMPORTANT
             val taskColor = priorityColor(currentTask.priority)
             val currentBreathing = if (isAlertTask) breathingUrgent else breathingBase
@@ -379,10 +402,11 @@ fun RadarSpiralScreen(
             // 中心核心球颜色：跟随最高优先级任务联动
             val topTask = tasks.firstOrNull()
             val coreColor = if (topTask != null) priorityColor(topTask.priority) else colorNormal
-            drawCircle(color = coreColor.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
-            drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
+            val coreEntrance = if (topTask != null) (taskEntrances[topTask.id]?.value ?: 0f) else 0f
+            drawCircle(color = coreColor.copy(alpha = 0.2f * pulseScale * coreEntrance), radius = 28f * coreEntrance, center = Offset(centerX, centerY))
+            drawCircle(color = Color.Black, radius = 22f * coreEntrance, center = Offset(centerX, centerY))
             val coreBreathing = if (topTask?.priority == TaskPriority.EMERGENCY || topTask?.priority == TaskPriority.IMPORTANT) breathingUrgent else breathingBase
-            drawCircle(color = coreColor.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * coreBreathing), center = Offset(centerX, centerY))
+            drawCircle(color = coreColor.copy(alpha = minOf(coreEntrance * 2f, 1f)), radius = 18f * coreEntrance * (0.8f + 0.2f * coreBreathing), center = Offset(centerX, centerY))
         }
     }
 }
