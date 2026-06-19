@@ -57,3 +57,7 @@ ehthumbs.db
 
 # Gemini artifacts (local agent data)
 .artifacts/
+
+# Documentation
+doc/
+
