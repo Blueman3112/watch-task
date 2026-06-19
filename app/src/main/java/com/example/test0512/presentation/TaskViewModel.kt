@@ -18,7 +18,8 @@ class TaskViewModel : ViewModel() {
     // 启动时为空，Demo 序列会逐个添加任务
     val tasks = mutableStateListOf<RadarTask>()
 
-    // Demo 演示序列：不同来源 → 不同节奏入场
+    // Demo 演示序列（12条任务，完整覆盖3种来源 × 4种优先级）
+    // 入场顺序精心编排：平稳日历 → 中等手动 → 突发微信 → 从容收尾
     private data class DemoEntry(val task: RadarTask, val delayBeforeMs: Long)
 
     private val demoSequence = listOf(
@@ -27,7 +28,7 @@ class TaskViewModel : ViewModel() {
             "准备好 PPT，重点陈述 PG-MoE 架构的创新点。记得带上打印好的论文原稿给评委老师。",
             TaskPriority.EMERGENCY, TaskSource.MANUAL, 10), 1000L),
 
-        // ── 日历任务：平稳节奏（每1秒一个，均匀入场）──
+        // ── 日历任务：平稳节奏（每1秒一个，均匀入场，代表日常规律）──
         DemoEntry(RadarTask(3, "操场跑步 5km", "晚上 20:00",
             "保持配速，戴上手表记录心率。每日打卡第 47 天。",
             TaskPriority.REGULAR, TaskSource.CALENDAR, 20), 1000L),
@@ -37,24 +38,36 @@ class TaskViewModel : ViewModel() {
         DemoEntry(RadarTask(6, "英语单词背诵", "每天 08:30",
             "今日任务：50 个考研核心词汇。",
             TaskPriority.REGULAR, TaskSource.CALENDAR, 40), 1000L),
+        DemoEntry(RadarTask(7, "吃药提醒", "每天 21:00",
+            "饭后服用维生素 D，不要忘记。",
+            TaskPriority.IMPORTANT, TaskSource.CALENDAR, 50), 1000L),
 
         // ── 手动任务：中等节奏（每1.2秒一个）──
         DemoEntry(RadarTask(2, "跑通模型训练", "今天 16:30",
             "检查服务器 GPU 占用，重新调整 batch size。",
-            TaskPriority.IMPORTANT, TaskSource.MANUAL, 50), 1200L),
+            TaskPriority.IMPORTANT, TaskSource.MANUAL, 60), 1200L),
         DemoEntry(RadarTask(8, "预定明天机票", "明天",
             "查看各大航司折扣，尽早锁定舱位。",
-            TaskPriority.IMPORTANT, TaskSource.MANUAL, 60), 1200L),
+            TaskPriority.IMPORTANT, TaskSource.MANUAL, 70), 1200L),
+        DemoEntry(RadarTask(11, "购买实验耗材", "下午",
+            "采购电极片和导电胶，实验室库存不够了。",
+            TaskPriority.REGULAR, TaskSource.MANUAL, 80), 1200L),
 
-        // ── 微信任务：突发快节奏（0.4秒，模拟突发消息）──
+        // ── 微信任务：突发快节奏（0.4秒，模拟突发消息涌入）──
         DemoEntry(RadarTask(4, "服务器续费", "今晚 24:00",
             "RackNerd VPS 马上到期了，赶紧去后台续费防失联！",
-            TaskPriority.EMERGENCY, TaskSource.WECHAT_IMPORT, 70), 400L),
+            TaskPriority.EMERGENCY, TaskSource.WECHAT_IMPORT, 90), 400L),
+        DemoEntry(RadarTask(9, "组会准备材料", "周三 10:00",
+            "导师在群里通知：本周组会每人汇报进展，准备 PPT。",
+            TaskPriority.IMPORTANT, TaskSource.WECHAT_IMPORT, 100), 400L),
+        DemoEntry(RadarTask(10, "项目进度汇报", "明天 15:00",
+            "项目组群通知：提交本周工作进展报告，抄送负责人。",
+            TaskPriority.EMERGENCY, TaskSource.WECHAT_IMPORT, 110), 400L),
 
-        // ── 最后一个：从容的长远任务 ──
+        // ── 最后一个：从容的长远任务（收尾）──
         DemoEntry(RadarTask(12, "阅读 Compose 源码", "明天上午",
             "深入理解 Recomposition 的底层触发机制。",
-            TaskPriority.LONG_TERM, TaskSource.MANUAL, 80), 1500L)
+            TaskPriority.LONG_TERM, TaskSource.MANUAL, 120), 1500L)
     )
 
     init {

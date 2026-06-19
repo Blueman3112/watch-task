@@ -143,19 +143,19 @@ fun RadarSpiralScreen(
     // 任务越多螺旋越大，像自然生长的有机体
     // N=1: 胚芽期(小) → N=4~5: 生长期 → N=8+: 成熟期(与原始外观一致)
     val taskCount = tasks.size
-    val growthFactor = ((taskCount - 1).toFloat() / 7f).coerceIn(0f, 1f)
+    val growthFactor = ((taskCount - 1).toFloat() / 11f).coerceIn(0f, 1f)
 
     val spiralAAnimatable = remember {
-        Animatable(20f + 22f * ((tasks.size - 1).toFloat() / 7f).coerceIn(0f, 1f))
+        Animatable(20f + 22f * ((tasks.size - 1).toFloat() / 11f).coerceIn(0f, 1f))
     }
     val spiralBAnimatable = remember {
-        Animatable(8f + 6f * ((tasks.size - 1).toFloat() / 7f).coerceIn(0f, 1f))
+        Animatable(8f + 6f * ((tasks.size - 1).toFloat() / 11f).coerceIn(0f, 1f))
     }
     val thetaMultiplier = 1.1f
 
     // 任务数变化时 → 螺旋体弹性生长/收缩动画
     LaunchedEffect(taskCount) {
-        val factor = ((taskCount - 1).toFloat() / 7f).coerceIn(0f, 1f)
+        val factor = ((taskCount - 1).toFloat() / 11f).coerceIn(0f, 1f)
         launch {
             spiralAAnimatable.animateTo(
                 20f + 22f * factor,
@@ -295,6 +295,24 @@ fun RadarSpiralScreen(
         val spiralA = spiralAAnimatable.value
         val spiralB = spiralBAnimatable.value
 
+        // 空屏等待状态：显示中心呼吸圈 + 等待提示
+        if (tasks.isEmpty()) {
+            // 中心呼吸等待圈
+            drawCircle(
+                color = colorNeutral.copy(alpha = 0.15f * pulseScale),
+                radius = 24f * pulseScale,
+                center = Offset(centerX, centerY),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+            drawCircle(
+                color = colorNeutral.copy(alpha = 0.08f),
+                radius = 8f * breathingBase,
+                center = Offset(centerX, centerY)
+            )
+            return@Canvas
+        }
+
+        // 有任务时才绘制螺旋引导线
         val helperPath = androidx.compose.ui.graphics.Path()
         val steps = 100
         val maxTheta = (tasks.size.toFloat() + 1f) * thetaMultiplier
@@ -306,8 +324,6 @@ fun RadarSpiralScreen(
             if (s == 0) helperPath.moveTo(x, y) else helperPath.lineTo(x, y)
         }
         drawPath(helperPath, color = colorNeutral.copy(alpha = 0.06f), style = Stroke(width = 1f))
-
-        if (tasks.isEmpty()) return@Canvas
 
         for (i in (tasks.size - 1) downTo 1) {
             val virtualIndex = i - progress
