@@ -43,10 +43,16 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material3.Text
+import androidx.wear.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
 import androidx.wear.compose.foundation.rotary.rotaryScrollable
 import com.example.test0512.model.RadarTask
 import com.example.test0512.model.TaskPriority
+import com.example.test0512.model.TaskSource
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.max
@@ -83,6 +89,24 @@ fun RadarSpiralScreen(
     var topCursorIndex by remember { mutableIntStateOf(1) }
 
     var rotaryAccumulator by remember { mutableFloatStateOf(0f) }
+
+    val taskPositions = remember { mutableStateMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    LaunchedEffect(tasks.toList()) {
+        val currentIds = tasks.map { it.id }.toSet()
+        taskPositions.keys.retainAll(currentIds)
+        
+        tasks.forEachIndexed { index, task ->
+            if (!taskPositions.containsKey(task.id)) {
+                taskPositions[task.id] = Animatable(index.toFloat() + 1f)
+            }
+            launch {
+                taskPositions[task.id]?.animateTo(
+                    targetValue = index.toFloat(),
+                    animationSpec = tween(600, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+    }
 
     val baseTeal = Color(0xFF4DB6AC)
 
@@ -123,6 +147,12 @@ fun RadarSpiralScreen(
 
     val unifiedScrollState = rememberScrollableState { delta ->
         if (entranceProgress.value < 1f) return@rememberScrollableState 0f
+        
+        val isSystemLocked = tasks.isNotEmpty() && tasks.first().priority == TaskPriority.EMERGENCY
+        if (isSystemLocked && !isTopMode) {
+            return@rememberScrollableState 0f
+        }
+
         if (isTopMode) {
             rotaryAccumulator += delta
             val threshold = 40f
@@ -169,6 +199,12 @@ fun RadarSpiralScreen(
                     onLongPress = { tapOffset ->
                         if (entranceProgress.value < 1f) return@detectTapGestures
                         
+                        val isSystemLocked = tasks.isNotEmpty() && tasks.first().priority == TaskPriority.EMERGENCY
+                        if (isSystemLocked) {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            return@detectTapGestures
+                        }
+                        
                         val centerX = size.width / 2f
                         val centerY = size.height / 2f
                         val centerHitRadius = if (isTopMode) 45f else 35f
@@ -207,7 +243,8 @@ fun RadarSpiralScreen(
 
                         if (!isTopMode) {
                             for (i in 1 until tasks.size) {
-                                val virtualIndex = i - progress
+                                val logicalIndex = taskPositions[tasks[i].id]?.value ?: i.toFloat()
+                                val virtualIndex = logicalIndex - progress
                                 if (virtualIndex <= 0f) continue
                                 val theta = virtualIndex * thetaMultiplier
                                 val r = spiralA + spiralB * theta
@@ -246,11 +283,19 @@ fun RadarSpiralScreen(
         if (tasks.isEmpty()) return@Canvas
 
         for (i in (tasks.size - 1) downTo 1) {
-            val virtualIndex = i - progress
+            val currentTask = tasks[i]
+            val logicalIndex = taskPositions[currentTask.id]?.value ?: i.toFloat()
+            val virtualIndex = logicalIndex - progress
             if (virtualIndex <= 0f) continue
-            val delayI = (i - 1) * 0.08f
-            val rawP = (eProgress - delayI) / 0.45f
-            val entranceFactor = FastOutSlowInEasing.transform(rawP.coerceIn(0f, 1f))
+            
+            val entranceFactor = if (eProgress >= 0.99f) {
+                1f
+            } else {
+                val delayIndex = minOf(logicalIndex - 1f, 15f)
+                val delayI = delayIndex * 0.05f
+                val rawP = (eProgress - delayI) / 0.25f
+                FastOutSlowInEasing.transform(rawP.coerceIn(0f, 1f))
+            }
             if (entranceFactor <= 0f) continue
 
             val targetTheta = virtualIndex * thetaMultiplier
@@ -264,13 +309,19 @@ fun RadarSpiralScreen(
             val pos = Offset(x, y)
             val isHovered = isTopMode && i == topCursorIndex
             
-            val currentTask = tasks[i]
             val isEmergency = currentTask.priority == TaskPriority.EMERGENCY
             val currentBreathing = if (isEmergency) breathingUrgent else breathingBase
 
+            val priorityScale = when (currentTask.priority) {
+                TaskPriority.EMERGENCY -> 1.5f
+                TaskPriority.IMPORTANT -> 1.2f
+                TaskPriority.REGULAR -> 1.0f
+                TaskPriority.LONG_TERM -> 0.8f
+            }
             val baseSize = 11f
-            val sizeScale = (1.2f - (virtualIndex * 0.08f)).coerceIn(0.5f, 1.2f)
-            val nodeRadius = (if (isHovered) 16f else baseSize * sizeScale) * (if (isHovered) 1f else currentBreathing)
+            val posScale = (1.2f - (virtualIndex * 0.08f)).coerceIn(0.5f, 1.2f)
+            val finalScale = posScale * priorityScale
+            val nodeRadius = (if (isHovered) 16f * priorityScale else baseSize * finalScale) * (if (isHovered) 1f else currentBreathing)
 
             val distanceAlpha = (0.8f - (virtualIndex * 0.06f)).coerceIn(0.1f, 0.8f)
             val finalAlpha = if (isTopMode) (if (isHovered) 1f else 0.05f) else distanceAlpha * edgeFadeFactor * entranceFactor
@@ -311,10 +362,27 @@ fun RadarSpiralScreen(
                 drawText(topTextLayout, topLeft = Offset(centerX - topTextLayout.size.width / 2f, centerY - topTextLayout.size.height / 2f))
             }
         } else {
-            val coreRed = Color(0xFFFF5252)
-            drawCircle(color = coreRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
-            drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
-            drawCircle(color = coreRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * breathingUrgent), center = Offset(centerX, centerY))
+            val isSystemLocked = tasks.isNotEmpty() && tasks.first().priority == TaskPriority.EMERGENCY
+            if (isSystemLocked) {
+                val lockRed = Color(0xFFFF5252)
+                drawCircle(
+                    color = lockRed.copy(alpha = 0.3f * pulseScale),
+                    radius = maxScreenRadius - 10f,
+                    center = Offset(centerX, centerY),
+                    style = Stroke(width = 15f)
+                )
+                val textLayout = textMeasurer.measure("LOCKED", TextStyle(color = lockRed.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.Black))
+                drawText(textLayout, topLeft = Offset(centerX - textLayout.size.width / 2f, centerY - 60f))
+                
+                drawCircle(color = lockRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
+                drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
+                drawCircle(color = lockRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.4f * breathingUrgent), center = Offset(centerX, centerY))
+            } else {
+                val coreRed = Color(0xFFFF5252)
+                drawCircle(color = coreRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
+                drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
+                drawCircle(color = coreRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * breathingUrgent), center = Offset(centerX, centerY))
+            }
         }
     }
 }
@@ -322,7 +390,9 @@ fun RadarSpiralScreen(
 @Composable
 fun AddTaskScreen(
     onDismiss: () -> Unit,
-    onSave: (String, String, String, TaskPriority) -> Unit
+    onSave: (String, String, String, TaskPriority) -> Unit,
+    onWechatImport: () -> Unit,
+    onCalendarSync: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -344,7 +414,13 @@ fun AddTaskScreen(
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 20.dp)
         ) {
             item {
-                Text("新建任务", color = Color(0xFF4DB6AC), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                ) {
+                    CompactActionButton(text = "微信导入", bgColor = Color(0xFF07C160), fgColor = Color.White, modifier = Modifier.weight(1f)) { onWechatImport() }
+                    CompactActionButton(text = "日历同步", bgColor = Color(0xFF4285F4), fgColor = Color.White, modifier = Modifier.weight(1f)) { onCalendarSync() }
+                }
             }
 
             item {
@@ -410,22 +486,20 @@ fun AddTaskScreen(
 
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
                 ) {
-                    CompactActionButton(
-                        text = "取消",
+                    IconActionButton(
+                        imageVector = Icons.Default.Close,
                         bgColor = Color(0xFF222222),
-                        fgColor = Color.White,
-                        modifier = Modifier.weight(1f)
+                        fgColor = Color.LightGray
                     ) {
                         onDismiss()
                     }
-                    CompactActionButton(
-                        text = "保存",
+                    IconActionButton(
+                        imageVector = Icons.Default.Check,
                         bgColor = Color(0xFF00796B),
-                        fgColor = Color.White,
-                        modifier = Modifier.weight(1f)
+                        fgColor = Color.White
                     ) {
                         if (title.isNotBlank()) onSave(title, description, "$date $time", priority)
                     }
@@ -550,18 +624,48 @@ fun TaskDetailScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFF6A1B1A) else Color(0xFF004D40).copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                BasicText(
-                    text = "${task.priority.label} · ${task.time}",
-                    style = TextStyle(color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFFFFCDD2) else Color(0xFF4DB6AC), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                )
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = when (task.source.name) {
+                                "WECHAT" -> Color(0xFF07C160).copy(alpha = 0.3f)
+                                "CALENDAR" -> Color(0xFF4285F4).copy(alpha = 0.3f)
+                                else -> Color(0xFF333333)
+                            },
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    BasicText(
+                        text = task.source.label,
+                        style = TextStyle(
+                            color = when (task.source.name) {
+                                "WECHAT" -> Color(0xFFC8E6C9)
+                                "CALENDAR" -> Color(0xFFBBDEFB)
+                                else -> Color.LightGray
+                            }, 
+                            fontSize = 9.sp, fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFF6A1B1A) else Color(0xFF004D40).copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    BasicText(
+                        text = "${task.priority.label} · ${task.time}",
+                        style = TextStyle(color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFFFFCDD2) else Color(0xFF4DB6AC), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -595,19 +699,17 @@ fun TaskDetailScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(0.95f),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(0.85f),
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CompactActionButton("关闭", Color(0xFF222222), Color.White, Modifier.weight(1f)) { onClose() }
+                IconActionButton(Icons.Default.Close, Color(0xFF222222), Color.LightGray) { onClose() }
                 
                 if (!isAlreadyTop) {
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        CircularActionButton("Top", Color(0xFF5D4037), Color(0xFFFFCCBC)) { onPinToTop() }
-                    }
+                    IconActionButton(Icons.Default.KeyboardArrowUp, Color(0xFF5D4037), Color(0xFFFFCCBC)) { onPinToTop() }
                 }
 
-                CompactActionButton("完成", Color(0xFF00796B), Color.White, Modifier.weight(1f)) { onComplete() }
+                IconActionButton(Icons.Default.Check, Color(0xFF00796B), Color.White) { onComplete() }
             }
         }
     }
@@ -669,6 +771,25 @@ fun CompactActionButton(text: String, bgColor: Color, fgColor: Color, modifier: 
         BasicText(
             text = text,
             style = TextStyle(color = fgColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+        )
+    }
+}
+
+@Composable
+fun IconActionButton(imageVector: androidx.compose.ui.graphics.vector.ImageVector, bgColor: Color, fgColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            tint = fgColor,
+            modifier = Modifier.size(24.dp)
         )
     }
 }

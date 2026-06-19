@@ -62,6 +62,14 @@ class MainActivity : ComponentActivity() {
                             onSave = { title, desc, time, priority ->
                                 viewModel.addTask(title, desc, time, priority)
                                 navController.popBackStack()
+                            },
+                            onWechatImport = {
+                                viewModel.importFromWechat()
+                                navController.popBackStack()
+                            },
+                            onCalendarSync = {
+                                viewModel.syncFromCalendar()
+                                navController.popBackStack()
                             }
                         )
                     }

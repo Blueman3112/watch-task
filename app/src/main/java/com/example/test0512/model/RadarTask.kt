@@ -16,12 +16,22 @@ enum class TaskPriority(val label: String) {
 }
 
 /**
+ * 任务来源枚举类
+ */
+enum class TaskSource(val label: String) {
+    MANUAL("手动输入"),
+    CALENDAR("日历同步"),
+    WECHAT("微信导入")
+}
+
+/**
  * 雷达图任务数据模型
  * @property id 任务唯一标识符
  * @property title 任务标题
  * @property time 任务时间描述
  * @property description 任务详细描述
  * @property priority 任务优先级，默认为 REGULAR (待处理)
+ * @property source 任务来源，默认为 MANUAL
  */
 data class RadarTask(
     val id: Int,
@@ -29,5 +39,6 @@ data class RadarTask(
     val time: String,
     val description: String,
     val priority: TaskPriority = TaskPriority.REGULAR,
+    val source: TaskSource = TaskSource.MANUAL,
     val sortOrder: Int = 0
 )
