@@ -42,12 +42,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.Icon
+import androidx.wear.compose.material.ToggleChip
+import androidx.wear.compose.material.ToggleChipDefaults
+import androidx.wear.compose.material.Switch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
 import androidx.wear.compose.foundation.rotary.rotaryScrollable
 import com.example.test0512.model.RadarTask
@@ -70,7 +75,9 @@ fun RadarSpiralScreen(
     tasks: List<RadarTask>,
     onTaskClick: (RadarTask) -> Unit,
     onTopConfirm: (Int) -> Unit,
-    onAddTaskClick: () -> Unit
+    onAddTaskClick: () -> Unit,
+    onSettingsClick: () -> Unit = {},
+    isShowSpiralLines: Boolean = true
 ) {
     val view = LocalView.current
     val coroutineScope = rememberCoroutineScope()
@@ -87,6 +94,9 @@ fun RadarSpiralScreen(
 
     var isTopMode by remember { mutableStateOf(false) }
     var topCursorIndex by remember { mutableIntStateOf(1) }
+
+    val MAX_TASK_CAPACITY = 12
+    var showCapacityWarning by remember { mutableStateOf(false) }
 
     var rotaryAccumulator by remember { mutableFloatStateOf(0f) }
 
@@ -196,6 +206,7 @@ fun RadarSpiralScreen(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = { focusRequester.requestFocus() },
+                    onDoubleTap = { onSettingsClick() },
                     onLongPress = { tapOffset ->
                         if (entranceProgress.value < 1f) return@detectTapGestures
                         
@@ -211,7 +222,12 @@ fun RadarSpiralScreen(
                         
                         if ((tapOffset - Offset(centerX, centerY)).getDistance() < centerHitRadius) {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                            onAddTaskClick()
+                            if (tasks.size >= MAX_TASK_CAPACITY) {
+                                view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+                                showCapacityWarning = true
+                            } else {
+                                onAddTaskClick()
+                            }
                         } else {
                             isTopMode = !isTopMode
                             if (isTopMode && tasks.size > 1) {
@@ -268,17 +284,19 @@ fun RadarSpiralScreen(
         val eProgress = entranceProgress.value
         val nativeCanvas = drawContext.canvas.nativeCanvas
 
-        val helperPath = androidx.compose.ui.graphics.Path()
-        val steps = 100
-        val maxTheta = (tasks.size.toFloat() + 1f) * thetaMultiplier
-        for (s in 0..steps) {
-            val t = (s.toFloat() / steps) * maxTheta
-            val r = spiralA + spiralB * t
-            val x = centerX + r * cos(t).toFloat()
-            val y = centerY + r * sin(t).toFloat()
-            if (s == 0) helperPath.moveTo(x, y) else helperPath.lineTo(x, y)
+        if (isShowSpiralLines) {
+            val helperPath = androidx.compose.ui.graphics.Path()
+            val steps = 100
+            val maxTheta = (tasks.size.toFloat() + 1f) * thetaMultiplier
+            for (s in 0..steps) {
+                val t = (s.toFloat() / steps) * maxTheta
+                val r = spiralA + spiralB * t
+                val x = centerX + r * cos(t).toFloat()
+                val y = centerY + r * sin(t).toFloat()
+                if (s == 0) helperPath.moveTo(x, y) else helperPath.lineTo(x, y)
+            }
+            drawPath(helperPath, color = baseTeal.copy(alpha = 0.08f), style = Stroke(width = 1f))
         }
-        drawPath(helperPath, color = baseTeal.copy(alpha = 0.08f), style = Stroke(width = 1f))
 
         if (tasks.isEmpty()) return@Canvas
 
@@ -382,6 +400,76 @@ fun RadarSpiralScreen(
                 drawCircle(color = coreRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
                 drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
                 drawCircle(color = coreRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * breathingUrgent), center = Offset(centerX, centerY))
+            }
+        }
+    } // End of Canvas
+
+    if (showCapacityWarning) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.85f))
+                .pointerInput(Unit) { detectTapGestures { } },
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.foundation.layout.Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                androidx.wear.compose.material3.Text(
+                    text = "容量已满",
+                    style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                androidx.wear.compose.material3.Text(
+                    text = "请先专注并清理已积压的任务",
+                    style = TextStyle(color = Color.LightGray, fontSize = 10.sp, fontWeight = FontWeight.Normal)
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                androidx.compose.foundation.layout.Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TaskPriority.values().forEach { prio ->
+                        val count = tasks.count { it.priority == prio }
+                        if (count > 0) {
+                            val color = when (prio) {
+                                TaskPriority.EMERGENCY -> Color(0xFFFF5252)
+                                TaskPriority.IMPORTANT -> Color(0xFFFFAB40)
+                                TaskPriority.REGULAR -> Color(0xFF4DB6AC)
+                                TaskPriority.LONG_TERM -> Color(0xFF90A4AE)
+                            }
+                            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                androidx.wear.compose.material3.Text(text = "$count", style = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                IconActionButton(
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    bgColor = Color(0xFF00796B),
+                    fgColor = Color.White
+                ) {
+                    showCapacityWarning = false
+                    isTopMode = true
+                    if (tasks.size > 1) {
+                        topCursorIndex = 1
+                    }
+                }
             }
         }
     }
@@ -791,5 +879,207 @@ fun IconActionButton(imageVector: androidx.compose.ui.graphics.vector.ImageVecto
             tint = fgColor,
             modifier = Modifier.size(24.dp)
         )
+    }
+}
+
+@Composable
+fun TaskListScreen(
+    tasks: List<RadarTask>,
+    onTaskClick: (RadarTask) -> Unit,
+    onSettingsClick: () -> Unit
+) {
+    val listState = rememberScalingLazyListState()
+    val focusRequester = remember { FocusRequester() }
+
+    ScalingLazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .rotaryScrollable(
+                behavior = RotaryScrollableDefaults.behavior(listState),
+                focusRequester = focusRequester
+            )
+            .focusRequester(focusRequester)
+            .focusable(),
+        state = listState,
+        contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp, start = 16.dp, end = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(tasks.size) { index ->
+            TaskListItem(task = tasks[index], onClick = { onTaskClick(tasks[index]) })
+        }
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        item {
+            CompactActionButton(
+                text = "系统设置",
+                bgColor = Color(0xFF333333),
+                fgColor = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = onSettingsClick
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+}
+
+@Composable
+fun TaskListItem(task: RadarTask, onClick: () -> Unit) {
+    val priorityColor = when (task.priority) {
+        TaskPriority.EMERGENCY -> Color(0xFFFF5252)
+        TaskPriority.IMPORTANT -> Color(0xFFFFAB40)
+        TaskPriority.REGULAR -> Color(0xFF4DB6AC)
+        TaskPriority.LONG_TERM -> Color(0xFF90A4AE)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1A1A1A))
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(priorityColor)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = task.title,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = task.time,
+                color = Color.Gray,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsScreen(
+    isListViewEnabled: Boolean,
+    isShowSpiralLines: Boolean,
+    onViewModeToggle: (Boolean) -> Unit,
+    onToggleSpiralLines: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    val listState = rememberScalingLazyListState()
+    val focusRequester = remember { FocusRequester() }
+
+    ScalingLazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .rotaryScrollable(
+                behavior = RotaryScrollableDefaults.behavior(listState),
+                focusRequester = focusRequester
+            )
+            .focusRequester(focusRequester)
+            .focusable(),
+        state = listState,
+        contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp, start = 8.dp, end = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                text = "系统设置",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        item {
+            ToggleChip(
+                modifier = Modifier.fillMaxWidth(),
+                checked = isListViewEnabled,
+                onCheckedChange = { onViewModeToggle(!isListViewEnabled) },
+                label = { 
+                    Text(
+                        text = "原生列表视图", 
+                        color = Color.White, 
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    ) 
+                },
+                toggleControl = {
+                    Switch(
+                        checked = isListViewEnabled,
+                        onCheckedChange = null,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                },
+                colors = ToggleChipDefaults.toggleChipColors(
+                    checkedStartBackgroundColor = Color(0xFF333333),
+                    checkedEndBackgroundColor = Color(0xFF333333),
+                    uncheckedStartBackgroundColor = Color(0xFF333333),
+                    uncheckedEndBackgroundColor = Color(0xFF333333)
+                )
+            )
+        }
+        item {
+            ToggleChip(
+                modifier = Modifier.fillMaxWidth(),
+                checked = isShowSpiralLines,
+                onCheckedChange = { onToggleSpiralLines(!isShowSpiralLines) },
+                label = { 
+                    Text(
+                        text = "显示螺旋线", 
+                        color = Color.White, 
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    ) 
+                },
+                toggleControl = {
+                    Switch(
+                        checked = isShowSpiralLines,
+                        onCheckedChange = null,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                },
+                colors = ToggleChipDefaults.toggleChipColors(
+                    checkedStartBackgroundColor = Color(0xFF333333),
+                    checkedEndBackgroundColor = Color(0xFF333333),
+                    uncheckedStartBackgroundColor = Color(0xFF333333),
+                    uncheckedEndBackgroundColor = Color(0xFF333333)
+                )
+            )
+        }
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        item {
+            CompactActionButton(
+                text = "返回",
+                bgColor = Color(0xFF1A1A1A),
+                fgColor = Color.White,
+                modifier = Modifier.width(80.dp),
+                onClick = onBack
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
     }
 }

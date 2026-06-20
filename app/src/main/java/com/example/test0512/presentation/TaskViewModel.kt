@@ -11,6 +11,19 @@ import com.example.test0512.model.TaskSource
 
 class TaskViewModel : ViewModel() {
     var pinnedNotification by mutableStateOf<String?>(null)
+    
+    var isListViewEnabled by mutableStateOf(false)
+        private set
+
+    var isShowSpiralLines by mutableStateOf(true)
+
+    fun toggleViewMode(isList: Boolean) {
+        isListViewEnabled = isList
+    }
+
+    fun toggleSpiralLines(isShow: Boolean) {
+        isShowSpiralLines = isShow
+    }
 
     // 严格还原初始的 8 条数据，确保螺旋线视觉饱满
     val tasks = mutableStateListOf(
@@ -60,8 +73,6 @@ class TaskViewModel : ViewModel() {
 
     fun completeTask(task: RadarTask) {
         tasks.remove(task)
-        val maxSortOrder = tasks.maxOfOrNull { it.sortOrder } ?: 0
-        tasks.add(task.copy(sortOrder = maxSortOrder + 10))
     }
 
     fun pinToTop(task: RadarTask) {

@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.sp
 import com.example.test0512.presentation.components.AddTaskScreen
 import com.example.test0512.presentation.components.RadarSpiralScreen
 import com.example.test0512.presentation.components.TaskDetailScreen
+import com.example.test0512.presentation.components.TaskListScreen
+import com.example.test0512.presentation.components.SettingsScreen
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
@@ -47,13 +49,34 @@ class MainActivity : ComponentActivity() {
                     startDestination = "home"
                 ) {
                     composable("home") {
-                        RadarSpiralScreen(
-                            tasks = tasks,
-                            onTaskClick = { clickedTask ->
-                                navController.navigate("task_detail/${clickedTask.id}")
-                            },
-                            onTopConfirm = { topIndex -> viewModel.pinToTopByIndex(topIndex) },
-                            onAddTaskClick = { navController.navigate("add_task") }
+                        if (viewModel.isListViewEnabled) {
+                            TaskListScreen(
+                                tasks = tasks,
+                                onTaskClick = { clickedTask ->
+                                    navController.navigate("task_detail/${clickedTask.id}")
+                                },
+                                onSettingsClick = { navController.navigate("settings") }
+                            )
+                        } else {
+                            RadarSpiralScreen(
+                                tasks = tasks,
+                                onTaskClick = { clickedTask ->
+                                    navController.navigate("task_detail/${clickedTask.id}")
+                                },
+                                onTopConfirm = { topIndex -> viewModel.pinToTopByIndex(topIndex) },
+                                onAddTaskClick = { navController.navigate("add_task") },
+                                onSettingsClick = { navController.navigate("settings") },
+                                isShowSpiralLines = viewModel.isShowSpiralLines
+                            )
+                        }
+                    }
+                    composable("settings") {
+                        SettingsScreen(
+                            isListViewEnabled = viewModel.isListViewEnabled,
+                            isShowSpiralLines = viewModel.isShowSpiralLines,
+                            onViewModeToggle = { isList -> viewModel.toggleViewMode(isList) },
+                            onToggleSpiralLines = { isShow -> viewModel.toggleSpiralLines(isShow) },
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable("add_task") {
