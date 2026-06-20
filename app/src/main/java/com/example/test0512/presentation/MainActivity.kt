@@ -113,6 +113,12 @@ class MainActivity : ComponentActivity() {
                                 onPinToTop = {
                                     viewModel.pinToTop(selectedTask)
                                     navController.popBackStack()
+                                },
+                                onUpdatePriority = { newPriority ->
+                                    viewModel.updateTaskPriority(selectedTask, newPriority)
+                                },
+                                onUpdateTime = { newTime ->
+                                    viewModel.updateTaskTime(selectedTask, newTime)
                                 }
                             )
                         }

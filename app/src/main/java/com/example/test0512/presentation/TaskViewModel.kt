@@ -71,6 +71,20 @@ class TaskViewModel : ViewModel() {
         )
     }
 
+    fun updateTaskPriority(task: RadarTask, newPriority: TaskPriority) {
+        val index = tasks.indexOfFirst { it.id == task.id }
+        if (index != -1) {
+            tasks[index] = tasks[index].copy(priority = newPriority)
+        }
+    }
+
+    fun updateTaskTime(task: RadarTask, newTime: String) {
+        val index = tasks.indexOfFirst { it.id == task.id }
+        if (index != -1) {
+            tasks[index] = tasks[index].copy(time = newTime)
+        }
+    }
+
     fun completeTask(task: RadarTask) {
         tasks.remove(task)
     }

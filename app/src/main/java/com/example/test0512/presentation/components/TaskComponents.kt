@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -349,7 +350,7 @@ fun RadarSpiralScreen(
             if (isEmergency) {
                 drawCircle(
                     color = (if (isHovered) Color.White else baseTeal).copy(alpha = finalAlpha * 0.4f * pulseScale), 
-                    radius = nodeRadius * 2.2f, 
+                    radius = nodeRadius * 1.8f, 
                     center = pos,
                     style = Stroke(width = 1.5.dp.toPx())
                 )
@@ -692,71 +693,134 @@ fun TaskDetailScreen(
     isAlreadyTop: Boolean,
     onClose: () -> Unit,
     onComplete: () -> Unit,
-    onPinToTop: () -> Unit
+    onPinToTop: () -> Unit,
+    onUpdatePriority: (TaskPriority) -> Unit = {},
+    onUpdateTime: (String) -> Unit = {}
 ) {
+    val view = LocalView.current
+    var showPriorityPicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .padding(horizontal = 16.dp),
+            .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(task.time, task.priority) {
+                    detectTapGestures(
+                        onLongPress = { offset ->
+                            val centerX = size.width / 2f
+                            val centerY = size.height / 2f
+                            val dx = offset.x - centerX
+                            val dy = offset.y - centerY
+                            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+                            
+                            if (distance > centerX - 45.dp.toPx()) {
+                                val angle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                                if (angle in -106f..-74f) {
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    showTimePicker = true
+                                } else if (angle in -62f..-34f) {
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    showPriorityPicker = true
+                                }
+                            }
+                        }
+                    )
+                }
+        ) {
+            val centerX = size.width / 2f
+            val centerY = size.height / 2f
+            val maxRadius = size.width / 2f
+            val arcRadius = maxRadius - 10.dp.toPx()
+            val rectF = android.graphics.RectF(
+                centerX - arcRadius, centerY - arcRadius, 
+                centerX + arcRadius, centerY + arcRadius
+            )
+            val strokeWidth = 14.dp.toPx()
+            
+            val topLeftOffset = Offset(centerX - arcRadius, centerY - arcRadius)
+            val arcSize = androidx.compose.ui.geometry.Size(arcRadius * 2, arcRadius * 2)
+            
+            // Source Arc
+            val capsuleBgColor = Color(0xFF2C2C2C)
+            drawArc(
+                color = capsuleBgColor,
+                startAngle = -146f,
+                sweepAngle = 28f,
+                useCenter = false,
+                topLeft = topLeftOffset,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+            
+            // Time Arc
+            drawArc(
+                color = capsuleBgColor,
+                startAngle = -106f,
+                sweepAngle = 32f,
+                useCenter = false,
+                topLeft = topLeftOffset,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+
+            // Priority Arc
+            drawArc(
+                color = capsuleBgColor,
+                startAngle = -62f,
+                sweepAngle = 28f,
+                useCenter = false,
+                topLeft = topLeftOffset,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+            
+            val nativeCanvas = drawContext.canvas.nativeCanvas
+            fun drawCurvedText(text: String, startAngle: Float, sweepAngle: Float, color: Int, sizeSp: Float = 9.5f, bold: Boolean = true) {
+                val path = android.graphics.Path()
+                path.addArc(rectF, startAngle, sweepAngle)
+                val paint = android.graphics.Paint().apply {
+                    this.color = color
+                    textSize = sizeSp.sp.toPx()
+                    isAntiAlias = true
+                    if (bold) typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                val textWidth = paint.measureText(text)
+                val arcLength = (2.0 * Math.PI * arcRadius * sweepAngle / 360.0).toFloat()
+                val hOffset = (arcLength - textWidth) / 2f
+                val vOffset = (paint.textSize / 3f)
+                nativeCanvas.drawTextOnPath(text, path, hOffset, vOffset, paint)
+            }
+            
+            drawCurvedText(task.source.label, -146f, 28f, android.graphics.Color.LTGRAY)
+            drawCurvedText(task.time, -106f, 32f, android.graphics.Color.WHITE)
+            
+            val prioTextColor = when (task.priority) {
+                TaskPriority.EMERGENCY -> android.graphics.Color.parseColor("#FF5252") // 红色高亮
+                TaskPriority.IMPORTANT -> android.graphics.Color.parseColor("#4CAF50") // 绿色高亮
+                else -> android.graphics.Color.LTGRAY
+            }
+            drawCurvedText(task.priority.label, -62f, 28f, prioTextColor)
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 16.dp)
                 .focusRequester(focusRequester)
                 .focusable(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = when (task.source.name) {
-                                "WECHAT" -> Color(0xFF07C160).copy(alpha = 0.3f)
-                                "CALENDAR" -> Color(0xFF4285F4).copy(alpha = 0.3f)
-                                else -> Color(0xFF333333)
-                            },
-                            shape = RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    BasicText(
-                        text = task.source.label,
-                        style = TextStyle(
-                            color = when (task.source.name) {
-                                "WECHAT" -> Color(0xFFC8E6C9)
-                                "CALENDAR" -> Color(0xFFBBDEFB)
-                                else -> Color.LightGray
-                            }, 
-                            fontSize = 9.sp, fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFF6A1B1A) else Color(0xFF004D40).copy(alpha = 0.6f),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    BasicText(
-                        text = "${task.priority.label} · ${task.time}",
-                        style = TextStyle(color = if (task.priority == TaskPriority.EMERGENCY) Color(0xFFFFCDD2) else Color(0xFF4DB6AC), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             BasicText(
                 text = task.title,
@@ -798,6 +862,52 @@ fun TaskDetailScreen(
                 }
 
                 IconActionButton(Icons.Default.Check, Color(0xFF00796B), Color.White) { onComplete() }
+            }
+        }
+
+        if (showPriorityPicker) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.96f))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { showPriorityPicker = false }) },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("修改紧急程度", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        TaskPriority.entries.forEach { p ->
+                            PriorityButton(priority = p, isSelected = task.priority == p, onClick = { 
+                                onUpdatePriority(p)
+                                showPriorityPicker = false 
+                            })
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showTimePicker) {
+            val parts = task.time.split(":")
+            val initHour = parts.getOrNull(0)?.filter { it.isDigit() }?.toIntOrNull() ?: java.time.LocalTime.now().hour
+            val initMinute = parts.getOrNull(1)?.filter { it.isDigit() }?.toIntOrNull() ?: java.time.LocalTime.now().minute
+            
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.wear.compose.material3.TimePicker(
+                    initialTime = java.time.LocalTime.of(initHour.coerceIn(0, 23), initMinute.coerceIn(0, 59)),
+                    onTimePicked = { pickedTime ->
+                        val newTime = String.format(Locale.getDefault(), "%02d:%02d", pickedTime.hour, pickedTime.minute)
+                        onUpdateTime(newTime)
+                        showTimePicker = false
+                    }
+                )
             }
         }
     }
