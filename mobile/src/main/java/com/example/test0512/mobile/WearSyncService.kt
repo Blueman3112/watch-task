@@ -16,6 +16,14 @@ import java.util.Calendar
 
 class WearSyncService : WearableListenerService() {
 
+    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "ACTION_FORCE_SYNC") {
+            Log.d("WearSyncService", "Force sync triggered from phone UI")
+            syncCalendarToWatch()
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     override fun onMessageReceived(messageEvent: MessageEvent) {
         super.onMessageReceived(messageEvent)
         if (messageEvent.path == "/sync_calendar") {

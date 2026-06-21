@@ -397,14 +397,21 @@ fun RadarSpiralScreen(
             }
         } else if (isSystemLocked) {
             val lockRed = Color(0xFFFF5252)
-            drawCircle(
-                color = lockRed.copy(alpha = 0.3f * pulseScale),
-                radius = maxScreenRadius - 10f,
+            
+            val edgeGradient = androidx.compose.ui.graphics.Brush.radialGradient(
+                0.0f to Color.Transparent,
+                0.85f to Color.Transparent,
+                0.95f to lockRed.copy(alpha = 0.1f * pulseScale),
+                1.0f to lockRed.copy(alpha = 0.4f * pulseScale),
                 center = Offset(centerX, centerY),
-                style = Stroke(width = 15f)
+                radius = maxScreenRadius
             )
-            val textLayout = textMeasurer.measure("LOCKED", TextStyle(color = lockRed.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.Black))
-            drawText(textLayout, topLeft = Offset(centerX - textLayout.size.width / 2f, centerY - 60f))
+            
+            drawCircle(
+                brush = edgeGradient,
+                radius = maxScreenRadius,
+                center = Offset(centerX, centerY)
+            )
             
             drawCircle(color = lockRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
             drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
@@ -837,35 +844,56 @@ fun TaskDetailScreen(
             
             val topLeftOffset = Offset(centerX - arcRadius, centerY - arcRadius)
             val arcSize = androidx.compose.ui.geometry.Size(arcRadius * 2, arcRadius * 2)
+
+            val displayTime = task.dueDate?.let {
+                val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+                sdf.format(java.util.Date(it))
+            } ?: "无截止时间"
+
+            val tempPaint = android.graphics.Paint().apply {
+                textSize = 9.5f.sp.toPx()
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            }
+            val textWidth = tempPaint.measureText(displayTime)
             
-            // Source Arc
+            val paddingDegrees = (20f * 360f / (2f * kotlin.math.PI.toFloat() * arcRadius))
+            val textSweepDegrees = (textWidth * 360f / (2f * kotlin.math.PI.toFloat() * arcRadius))
+            
+            val timeSweepAngle = maxOf(32f, textSweepDegrees + paddingDegrees)
+            val timeStartAngle = -90f - (timeSweepAngle / 2f)
+
+            val gapAngle = 12f
+            val sourceSweepAngle = 28f
+            val sourceStartAngle = timeStartAngle - gapAngle - sourceSweepAngle
+
+            val prioritySweepAngle = 28f
+            val priorityStartAngle = timeStartAngle + timeSweepAngle + gapAngle
+            
             val capsuleBgColor = Color(0xFF2C2C2C)
             drawArc(
                 color = capsuleBgColor,
-                startAngle = -146f,
-                sweepAngle = 28f,
+                startAngle = sourceStartAngle,
+                sweepAngle = sourceSweepAngle,
                 useCenter = false,
                 topLeft = topLeftOffset,
                 size = arcSize,
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
             
-            // Time Arc
             drawArc(
                 color = capsuleBgColor,
-                startAngle = -106f,
-                sweepAngle = 32f,
+                startAngle = timeStartAngle,
+                sweepAngle = timeSweepAngle,
                 useCenter = false,
                 topLeft = topLeftOffset,
                 size = arcSize,
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
 
-            // Priority Arc
             drawArc(
                 color = capsuleBgColor,
-                startAngle = -62f,
-                sweepAngle = 28f,
+                startAngle = priorityStartAngle,
+                sweepAngle = prioritySweepAngle,
                 useCenter = false,
                 topLeft = topLeftOffset,
                 size = arcSize,
@@ -882,26 +910,22 @@ fun TaskDetailScreen(
                     isAntiAlias = true
                     if (bold) typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
                 }
-                val textWidth = paint.measureText(text)
+                val tWidth = paint.measureText(text)
                 val arcLength = (2.0 * Math.PI * arcRadius * sweepAngle / 360.0).toFloat()
-                val hOffset = (arcLength - textWidth) / 2f
+                val hOffset = maxOf(0f, (arcLength - tWidth) / 2f)
                 val vOffset = (paint.textSize / 3f)
                 nativeCanvas.drawTextOnPath(text, path, hOffset, vOffset, paint)
             }
             
-            drawCurvedText(task.source.label, -146f, 28f, android.graphics.Color.LTGRAY)
-            val displayTime = task.dueDate?.let {
-                val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
-                sdf.format(java.util.Date(it))
-            } ?: "无截止时间"
-            drawCurvedText(displayTime, -106f, 32f, android.graphics.Color.WHITE)
+            drawCurvedText(task.source.label, sourceStartAngle, sourceSweepAngle, android.graphics.Color.LTGRAY)
+            drawCurvedText(displayTime, timeStartAngle, timeSweepAngle, android.graphics.Color.WHITE)
             
             val prioTextColor = when (task.priority) {
-                TaskPriority.EMERGENCY -> android.graphics.Color.parseColor("#FF5252") // 红色高亮
-                TaskPriority.IMPORTANT -> android.graphics.Color.parseColor("#4CAF50") // 绿色高亮
+                TaskPriority.EMERGENCY -> android.graphics.Color.parseColor("#FF5252")
+                TaskPriority.IMPORTANT -> android.graphics.Color.parseColor("#4CAF50")
                 else -> android.graphics.Color.LTGRAY
             }
-            drawCurvedText(task.priority.label, -62f, 28f, prioTextColor)
+            drawCurvedText(task.priority.label, priorityStartAngle, prioritySweepAngle, prioTextColor)
         }
 
         Column(
@@ -913,7 +937,7 @@ fun TaskDetailScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(38.dp))
 
             BasicText(
                 text = task.title,
