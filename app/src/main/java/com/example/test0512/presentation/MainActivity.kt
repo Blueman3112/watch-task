@@ -24,15 +24,22 @@ import com.example.test0512.presentation.components.SettingsScreen
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
+import com.example.test0512.data.AppDatabase
+import com.example.test0512.data.TaskRepository
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: TaskViewModel by viewModels()
+    private val viewModel: TaskViewModel by viewModels {
+        TaskViewModel.Factory(
+            TaskRepository(AppDatabase.getDatabase(this.applicationContext).taskDao())
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val tasks = viewModel.tasks
+            val tasks by viewModel.tasks.collectAsState()
+            val isSystemLocked by viewModel.isSystemLocked.collectAsState()
             val pinnedNotification = viewModel.pinnedNotification
             val navController = rememberSwipeDismissableNavController()
 
@@ -59,11 +66,15 @@ class MainActivity : ComponentActivity() {
                             )
                         } else {
                             RadarSpiralScreen(
-                                tasks = tasks,
+                                rawTasks = tasks,
+                                optimisticPinnedId = viewModel.optimisticPinnedId,
+                                isSystemLocked = isSystemLocked,
                                 onTaskClick = { clickedTask ->
                                     navController.navigate("task_detail/${clickedTask.id}")
                                 },
-                                onTopConfirm = { topIndex -> viewModel.pinToTopByIndex(topIndex) },
+                                onTopConfirm = { taskId ->
+                                    viewModel.pinTaskToTop(taskId)
+                                },
                                 onAddTaskClick = { navController.navigate("add_task") },
                                 onSettingsClick = { navController.navigate("settings") },
                                 isShowSpiralLines = viewModel.isShowSpiralLines
@@ -76,14 +87,33 @@ class MainActivity : ComponentActivity() {
                             isShowSpiralLines = viewModel.isShowSpiralLines,
                             onViewModeToggle = { isList -> viewModel.toggleViewMode(isList) },
                             onToggleSpiralLines = { isShow -> viewModel.toggleSpiralLines(isShow) },
+                            onUncompleteAll = { 
+                                viewModel.uncompleteAllTasks()
+                                navController.popBackStack()
+                            },
+                            onRestoreInitialData = {
+                                viewModel.restoreInitialData()
+                                navController.popBackStack()
+                            },
                             onBack = { navController.popBackStack() }
                         )
                     }
                     composable("add_task") {
                         AddTaskScreen(
                             onDismiss = { navController.popBackStack() },
-                            onSave = { title, desc, time, priority ->
-                                viewModel.addTask(title, desc, time, priority)
+                            onSave = { title, desc, timeStr, dueDate, priority ->
+                                val finalTimeStr = if (timeStr.contains("自动")) {
+                                    if (dueDate != null) {
+                                        val offset = if (priority == com.example.test0512.model.TaskPriority.EMERGENCY) 5L * 3600_000L else 1L * 3600_000L
+                                        val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+                                        sdf.format(java.util.Date(dueDate - offset))
+                                    } else {
+                                        "无提醒"
+                                    }
+                                } else {
+                                    timeStr
+                                }
+                                viewModel.addTask(title, desc, finalTimeStr, dueDate, priority)
                                 navController.popBackStack()
                             },
                             onWechatImport = {
@@ -98,20 +128,18 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("task_detail/{taskId}") { backStackEntry ->
                         val taskIdStr = backStackEntry.arguments?.getString("taskId")
-                        val taskId = taskIdStr?.toIntOrNull()
-                        val selectedTask = tasks.find { it.id == taskId }
+                        val selectedTask = tasks.find { it.id == taskIdStr }
 
                         if (selectedTask != null) {
                             TaskDetailScreen(
                                 task = selectedTask,
-                                isAlreadyTop = tasks.indexOf(selectedTask) == 0,
                                 onClose = { navController.popBackStack() },
                                 onComplete = {
                                     viewModel.completeTask(selectedTask)
                                     navController.popBackStack()
                                 },
-                                onPinToTop = {
-                                    viewModel.pinToTop(selectedTask)
+                                onPin = {
+                                    viewModel.pinTaskToTop(selectedTask.id)
                                     navController.popBackStack()
                                 },
                                 onUpdatePriority = { newPriority ->

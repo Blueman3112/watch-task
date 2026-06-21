@@ -73,13 +73,39 @@ import java.util.Locale
 
 @Composable
 fun RadarSpiralScreen(
-    tasks: List<RadarTask>,
+    rawTasks: List<RadarTask>,
+    optimisticPinnedId: String? = null,
+    isSystemLocked: Boolean,
     onTaskClick: (RadarTask) -> Unit,
-    onTopConfirm: (Int) -> Unit,
+    onTopConfirm: (String) -> Unit,
     onAddTaskClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
     isShowSpiralLines: Boolean = true
 ) {
+    val tasks = remember(rawTasks, optimisticPinnedId) {
+        val list = if (optimisticPinnedId != null) {
+            rawTasks.map { it.copy(isPinned = it.id == optimisticPinnedId) }
+        } else {
+            rawTasks
+        }
+        val now = System.currentTimeMillis()
+        list.sortedWith(
+            compareByDescending<RadarTask> { it.isPinned }
+                .thenByDescending {
+                    val baseScore = when (it.priority) {
+                        TaskPriority.EMERGENCY -> 100
+                        TaskPriority.IMPORTANT -> 50
+                        TaskPriority.REGULAR -> 20
+                        TaskPriority.LONG_TERM -> 5
+                    }
+                    val timeLeft = it.dueDate?.minus(now) ?: Long.MAX_VALUE
+                    val timeMultiplier = if (timeLeft <= 0) 5.0 else if (timeLeft < 3600_000) 2.0 else 1.0
+                    (baseScore * timeMultiplier).toInt()
+                }
+                .thenByDescending { it.createdAt }
+        )
+    }
+
     val view = LocalView.current
     val coroutineScope = rememberCoroutineScope()
     val scrollOffset = remember { Animatable(0f) }
@@ -93,15 +119,25 @@ fun RadarSpiralScreen(
         focusRequester.requestFocus()
     }
 
-    var isTopMode by remember { mutableStateOf(false) }
-    var topCursorIndex by remember { mutableIntStateOf(1) }
-
     val MAX_TASK_CAPACITY = 12
     var showCapacityWarning by remember { mutableStateOf(false) }
 
+    var isTopMode by remember { mutableStateOf(false) }
+    var topCursorIndex by remember { mutableIntStateOf(1) }
     var rotaryAccumulator by remember { mutableFloatStateOf(0f) }
 
-    val taskPositions = remember { mutableStateMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    fun adjustCameraForCursor(targetIdx: Int) {
+        coroutineScope.launch {
+            val vIdx = targetIdx - scrollOffset.value
+            if (vIdx > 4.5f) {
+                scrollOffset.animateTo((targetIdx - 4.5f).coerceAtLeast(0f), tween(250, easing = FastOutSlowInEasing))
+            } else if (vIdx < 1.2f) {
+                scrollOffset.animateTo(max(0f, targetIdx - 1.5f), tween(250, easing = FastOutSlowInEasing))
+            }
+        }
+    }
+
+    val taskPositions = remember { mutableStateMapOf<String, Animatable<Float, AnimationVector1D>>() }
     LaunchedEffect(tasks.toList()) {
         val currentIds = tasks.map { it.id }.toSet()
         taskPositions.keys.retainAll(currentIds)
@@ -144,26 +180,9 @@ fun RadarSpiralScreen(
     val spiralB = 14f
     val thetaMultiplier = 1.1f
 
-    fun adjustCameraForCursor(targetIdx: Int) {
-        coroutineScope.launch {
-            val vIdx = targetIdx - scrollOffset.value
-            if (vIdx > 4.5f) {
-                scrollOffset.animateTo((targetIdx - 4.5f).coerceAtLeast(0f), tween(250, easing = FastOutSlowInEasing))
-            }
-            else if (vIdx < 1.2f) {
-                scrollOffset.animateTo(max(0f, targetIdx - 1.5f), tween(250, easing = FastOutSlowInEasing))
-            }
-        }
-    }
-
     val unifiedScrollState = rememberScrollableState { delta ->
         if (entranceProgress.value < 1f) return@rememberScrollableState 0f
         
-        val isSystemLocked = tasks.isNotEmpty() && tasks.first().priority == TaskPriority.EMERGENCY
-        if (isSystemLocked && !isTopMode) {
-            return@rememberScrollableState 0f
-        }
-
         if (isTopMode) {
             rotaryAccumulator += delta
             val threshold = 40f
@@ -211,12 +230,6 @@ fun RadarSpiralScreen(
                     onLongPress = { tapOffset ->
                         if (entranceProgress.value < 1f) return@detectTapGestures
                         
-                        val isSystemLocked = tasks.isNotEmpty() && tasks.first().priority == TaskPriority.EMERGENCY
-                        if (isSystemLocked) {
-                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                            return@detectTapGestures
-                        }
-                        
                         val centerX = size.width / 2f
                         val centerY = size.height / 2f
                         val centerHitRadius = if (isTopMode) 45f else 35f
@@ -247,12 +260,14 @@ fun RadarSpiralScreen(
                         if ((tapOffset - Offset(centerX, centerY)).getDistance() < centerHitRadius) {
                             view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                             if (isTopMode && tasks.isNotEmpty()) {
-                                onTopConfirm(topCursorIndex)
+                                android.util.Log.d("WatchTask", "Center tapped in TopMode! Confirming top for task: ${tasks[topCursorIndex].id}")
+                                onTopConfirm(tasks[topCursorIndex].id)
                                 isTopMode = false
                                 coroutineScope.launch {
                                     scrollOffset.animateTo(0f, tween(500, easing = FastOutSlowInEasing))
                                 }
                             } else if (tasks.isNotEmpty()) {
+                                android.util.Log.d("WatchTask", "Center tapped in NormalMode! Opening task: ${tasks[0].id}, title: ${tasks[0].title}")
                                 onTaskClick(tasks[0])
                             }
                             return@detectTapGestures
@@ -269,7 +284,6 @@ fun RadarSpiralScreen(
                                 if ((tapOffset - pos).getDistance() < 25f) {
                                     view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                                     onTaskClick(tasks[i])
-                                    break
                                 }
                             }
                         }
@@ -325,18 +339,18 @@ fun RadarSpiralScreen(
 
             val x = centerX + r * cos(currentTheta).toFloat()
             val y = centerY + r * sin(currentTheta).toFloat()
-            val pos = Offset(x, y)
-            val isHovered = isTopMode && i == topCursorIndex
-            
-            val isEmergency = currentTask.priority == TaskPriority.EMERGENCY
-            val currentBreathing = if (isEmergency) breathingUrgent else breathingBase
-
             val priorityScale = when (currentTask.priority) {
                 TaskPriority.EMERGENCY -> 1.5f
                 TaskPriority.IMPORTANT -> 1.2f
                 TaskPriority.REGULAR -> 1.0f
                 TaskPriority.LONG_TERM -> 0.8f
             }
+            val pos = Offset(x, y)
+            val isHovered = isTopMode && i == topCursorIndex
+            
+            val isEmergency = currentTask.priority == TaskPriority.EMERGENCY
+            val currentBreathing = if (isEmergency) breathingUrgent else breathingBase
+            
             val baseSize = 11f
             val posScale = (1.2f - (virtualIndex * 0.08f)).coerceIn(0.5f, 1.2f)
             val finalScale = posScale * priorityScale
@@ -355,6 +369,7 @@ fun RadarSpiralScreen(
                     style = Stroke(width = 1.5.dp.toPx())
                 )
             }
+
             drawCircle(color = nodeColor, radius = nodeRadius, center = pos)
         }
 
@@ -365,8 +380,8 @@ fun RadarSpiralScreen(
                 drawText(prioLayout, topLeft = Offset(centerX - prioLayout.size.width / 2f, 24f))
 
                 val rArc = maxScreenRadius - 32f
-                val bottomPath = NativePath().apply { addArc(RectF(centerX - rArc, centerY - rArc, centerX + rArc, centerY + rArc), 180f, -180f) }
-                val titlePaint = NativePaint().apply {
+                val bottomPath = android.graphics.Path().apply { addArc(android.graphics.RectF(centerX - rArc, centerY - rArc, centerX + rArc, centerY + rArc), 180f, -180f) }
+                val titlePaint = android.graphics.Paint().apply {
                     color = android.graphics.Color.WHITE
                     textSize = 15.sp.toPx()
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -380,28 +395,25 @@ fun RadarSpiralScreen(
                 val topTextLayout = textMeasurer.measure("TOP", TextStyle(color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.Black))
                 drawText(topTextLayout, topLeft = Offset(centerX - topTextLayout.size.width / 2f, centerY - topTextLayout.size.height / 2f))
             }
+        } else if (isSystemLocked) {
+            val lockRed = Color(0xFFFF5252)
+            drawCircle(
+                color = lockRed.copy(alpha = 0.3f * pulseScale),
+                radius = maxScreenRadius - 10f,
+                center = Offset(centerX, centerY),
+                style = Stroke(width = 15f)
+            )
+            val textLayout = textMeasurer.measure("LOCKED", TextStyle(color = lockRed.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.Black))
+            drawText(textLayout, topLeft = Offset(centerX - textLayout.size.width / 2f, centerY - 60f))
+            
+            drawCircle(color = lockRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
+            drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
+            drawCircle(color = lockRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.4f * breathingUrgent), center = Offset(centerX, centerY))
         } else {
-            val isSystemLocked = tasks.isNotEmpty() && tasks.first().priority == TaskPriority.EMERGENCY
-            if (isSystemLocked) {
-                val lockRed = Color(0xFFFF5252)
-                drawCircle(
-                    color = lockRed.copy(alpha = 0.3f * pulseScale),
-                    radius = maxScreenRadius - 10f,
-                    center = Offset(centerX, centerY),
-                    style = Stroke(width = 15f)
-                )
-                val textLayout = textMeasurer.measure("LOCKED", TextStyle(color = lockRed.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.Black))
-                drawText(textLayout, topLeft = Offset(centerX - textLayout.size.width / 2f, centerY - 60f))
-                
-                drawCircle(color = lockRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
-                drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
-                drawCircle(color = lockRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.4f * breathingUrgent), center = Offset(centerX, centerY))
-            } else {
-                val coreRed = Color(0xFFFF5252)
-                drawCircle(color = coreRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
-                drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
-                drawCircle(color = coreRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * breathingUrgent), center = Offset(centerX, centerY))
-            }
+            val coreRed = Color(0xFFFF5252)
+            drawCircle(color = coreRed.copy(alpha = 0.2f * pulseScale), radius = 28f, center = Offset(centerX, centerY))
+            drawCircle(color = Color.Black, radius = 22f, center = Offset(centerX, centerY))
+            drawCircle(color = coreRed.copy(alpha = minOf(eProgress * 2f, 1f)), radius = 18f * (0.8f + 0.2f * breathingUrgent), center = Offset(centerX, centerY))
         }
     } // End of Canvas
 
@@ -466,10 +478,6 @@ fun RadarSpiralScreen(
                     fgColor = Color.White
                 ) {
                     showCapacityWarning = false
-                    isTopMode = true
-                    if (tasks.size > 1) {
-                        topCursorIndex = 1
-                    }
                 }
             }
         }
@@ -479,17 +487,21 @@ fun RadarSpiralScreen(
 @Composable
 fun AddTaskScreen(
     onDismiss: () -> Unit,
-    onSave: (String, String, String, TaskPriority) -> Unit,
+    onSave: (String, String, String, Long?, TaskPriority) -> Unit,
     onWechatImport: () -> Unit,
     onCalendarSync: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
-    var time by remember { mutableStateOf(java.time.LocalTime.now().run { String.format(java.util.Locale.getDefault(), "%02d:%02d", hour, minute) }) }
+    var date by remember { mutableStateOf("自动") }
+    var time by remember { mutableStateOf("自动") }
+    var dueDate by remember { mutableStateOf(java.time.LocalDate.now().plusDays(1).toString()) }
+    var dueTime by remember { mutableStateOf(java.time.LocalTime.now().run { String.format(java.util.Locale.getDefault(), "%02d:%02d", hour, minute) }) }
     var priority by remember { mutableStateOf(TaskPriority.REGULAR) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showDueTimePicker by remember { mutableStateOf(false) }
+    var showDueDatePicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val listState = rememberScalingLazyListState()
@@ -534,21 +546,52 @@ fun AddTaskScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Column(
-                        modifier = Modifier.weight(1f).clickable { showDatePicker = true }
+                        modifier = Modifier.weight(1f).clickable { showDueDatePicker = true }
                     ) {
-                        Text("日期", fontSize = 10.sp, color = Color(0xFF4DB6AC))
+                        Text("截止日期", fontSize = 10.sp, color = Color(0xFFE57373))
                         Box(
                             modifier = Modifier.fillMaxWidth().height(38.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            val displayDate = date.substring(5) // e.g., "06-09"
+                            val displayDate = dueDate.substring(5)
+                            Text(displayDate, color = Color.White, fontSize = 14.sp)
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f).clickable { showDueTimePicker = true }
+                    ) {
+                        Text("截止时间", fontSize = 10.sp, color = Color(0xFFE57373))
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(38.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(dueTime, color = Color.White, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f).clickable { showDatePicker = true }
+                    ) {
+                        Text("提醒日期", fontSize = 10.sp, color = Color(0xFF4DB6AC))
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(38.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val displayDate = if (date == "自动") "自动" else date.substring(5)
                             Text(displayDate, color = Color.White, fontSize = 14.sp)
                         }
                     }
                     Column(
                         modifier = Modifier.weight(1f).clickable { showTimePicker = true }
                     ) {
-                        Text("时间", fontSize = 10.sp, color = Color(0xFF4DB6AC))
+                        Text("提醒时间", fontSize = 10.sp, color = Color(0xFF4DB6AC))
                         Box(
                             modifier = Modifier.fillMaxWidth().height(38.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp)),
                             contentAlignment = Alignment.Center
@@ -590,14 +633,22 @@ fun AddTaskScreen(
                         bgColor = Color(0xFF00796B),
                         fgColor = Color.White
                     ) {
-                        if (title.isNotBlank()) onSave(title, description, "$date $time", priority)
+                        if (title.isNotBlank()) {
+                            val dueTimestamp = try {
+                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                sdf.parse("$dueDate $dueTime")?.time
+                            } catch (e: Exception) {
+                                null
+                            }
+                            onSave(title, description, "$date $time", dueTimestamp, priority)
+                        }
                     }
                 }
             }
         }
 
         if (showDatePicker) {
-            val dateParts = date.split("-")
+            val dateParts = if (date == "自动") emptyList() else date.split("-")
             val initYear = dateParts.getOrNull(0)?.toIntOrNull() ?: java.time.LocalDate.now().year
             val initMonth = dateParts.getOrNull(1)?.toIntOrNull() ?: java.time.LocalDate.now().monthValue
             val initDay = dateParts.getOrNull(2)?.toIntOrNull() ?: java.time.LocalDate.now().dayOfMonth
@@ -617,7 +668,46 @@ fun AddTaskScreen(
         }
 
         if (showTimePicker) {
-            val parts = time.split(":")
+            val parts = if (time == "自动") emptyList() else time.split(":")
+            val initHour = parts.getOrNull(0)?.toIntOrNull() ?: java.time.LocalTime.now().hour
+            val initMinute = parts.getOrNull(1)?.toIntOrNull() ?: java.time.LocalTime.now().minute
+            
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.wear.compose.material3.TimePicker(
+                    initialTime = java.time.LocalTime.of(initHour, initMinute),
+                    onTimePicked = { pickedTime ->
+                        time = String.format(java.util.Locale.getDefault(), "%02d:%02d", pickedTime.hour, pickedTime.minute)
+                        showTimePicker = false
+                    }
+                )
+            }
+        }
+
+        if (showDueDatePicker) {
+            val dateParts = dueDate.split("-")
+            val initYear = dateParts.getOrNull(0)?.toIntOrNull() ?: java.time.LocalDate.now().year
+            val initMonth = dateParts.getOrNull(1)?.toIntOrNull() ?: java.time.LocalDate.now().monthValue
+            val initDay = dateParts.getOrNull(2)?.toIntOrNull() ?: java.time.LocalDate.now().dayOfMonth
+            
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.wear.compose.material3.DatePicker(
+                    initialDate = java.time.LocalDate.of(initYear, initMonth, initDay),
+                    onDatePicked = { pickedDate ->
+                        dueDate = pickedDate.toString()
+                        showDueDatePicker = false
+                    }
+                )
+            }
+        }
+
+        if (showDueTimePicker) {
+            val parts = dueTime.split(":")
             val initHour = parts.getOrNull(0)?.toIntOrNull() ?: 12
             val initMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0
             
@@ -628,8 +718,8 @@ fun AddTaskScreen(
                 androidx.wear.compose.material3.TimePicker(
                     initialTime = java.time.LocalTime.of(initHour, initMinute),
                     onTimePicked = { pickedTime ->
-                        time = String.format(Locale.getDefault(), "%02d:%02d", pickedTime.hour, pickedTime.minute)
-                        showTimePicker = false
+                        dueTime = String.format(java.util.Locale.getDefault(), "%02d:%02d", pickedTime.hour, pickedTime.minute)
+                        showDueTimePicker = false
                     }
                 )
             }
@@ -690,10 +780,9 @@ fun TaskInputField(
 @Composable
 fun TaskDetailScreen(
     task: RadarTask,
-    isAlreadyTop: Boolean,
     onClose: () -> Unit,
     onComplete: () -> Unit,
-    onPinToTop: () -> Unit,
+    onPin: () -> Unit,
     onUpdatePriority: (TaskPriority) -> Unit = {},
     onUpdateTime: (String) -> Unit = {}
 ) {
@@ -801,7 +890,11 @@ fun TaskDetailScreen(
             }
             
             drawCurvedText(task.source.label, -146f, 28f, android.graphics.Color.LTGRAY)
-            drawCurvedText(task.time, -106f, 32f, android.graphics.Color.WHITE)
+            val displayTime = task.dueDate?.let {
+                val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+                sdf.format(java.util.Date(it))
+            } ?: "无截止时间"
+            drawCurvedText(displayTime, -106f, 32f, android.graphics.Color.WHITE)
             
             val prioTextColor = when (task.priority) {
                 TaskPriority.EMERGENCY -> android.graphics.Color.parseColor("#FF5252") // 红色高亮
@@ -851,16 +944,12 @@ fun TaskDetailScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(0.85f),
+                modifier = Modifier.fillMaxWidth(0.9f),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconActionButton(Icons.Default.Close, Color(0xFF222222), Color.LightGray) { onClose() }
-                
-                if (!isAlreadyTop) {
-                    IconActionButton(Icons.Default.KeyboardArrowUp, Color(0xFF5D4037), Color(0xFFFFCCBC)) { onPinToTop() }
-                }
-
+                IconActionButton(Icons.Default.KeyboardArrowUp, Color(0xFF5D4037), Color(0xFFFFB300)) { onPin() }
                 IconActionButton(Icons.Default.Check, Color(0xFF00796B), Color.White) { onComplete() }
             }
         }
@@ -1089,6 +1178,8 @@ fun SettingsScreen(
     isShowSpiralLines: Boolean,
     onViewModeToggle: (Boolean) -> Unit,
     onToggleSpiralLines: (Boolean) -> Unit,
+    onUncompleteAll: () -> Unit,
+    onRestoreInitialData: () -> Unit,
     onBack: () -> Unit
 ) {
     val listState = rememberScalingLazyListState()
@@ -1173,6 +1264,24 @@ fun SettingsScreen(
                     uncheckedStartBackgroundColor = Color(0xFF333333),
                     uncheckedEndBackgroundColor = Color(0xFF333333)
                 )
+            )
+        }
+        item {
+            CompactActionButton(
+                text = "一键未完成",
+                bgColor = Color(0xFF006064),
+                fgColor = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = onUncompleteAll
+            )
+        }
+        item {
+            CompactActionButton(
+                text = "恢复初始数据",
+                bgColor = Color(0xFFB71C1C),
+                fgColor = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = onRestoreInitialData
             )
         }
         item {

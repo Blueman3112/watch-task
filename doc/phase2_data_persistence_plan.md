@@ -8,8 +8,8 @@
 1. **修改 `libs.versions.toml`**：
    - 添加 Room 相关依赖（版本 2.6.1）。
 2. **修改 `app/build.gradle.kts`**：
-   - 引入 `kotlin-kapt` 插件（由于 Kotlin 版本较高，使用 KAPT 替代 KSP 处理 Room 注解以避免兼容性风险）。
-   - 引入 `room-runtime`、`room-ktx` 以及 `kapt` 编译器依赖。
+   - 引入 `com.google.devtools.ksp` 插件（实际执行中因 AGP 9.0 兼容性问题，已废弃 KAPT 并改用 KSP，并将 Kotlin 版本规范为 2.0.0）。
+   - 引入 `room-runtime`、`room-ktx` 以及 `ksp` 编译器依赖。
    - 同步 Gradle 确保环境正常无报错。
 
 ## 阶段二：Room 数据库核心构建 (本地数据层)
@@ -32,5 +32,5 @@
 4. **服务注册**：在 `AndroidManifest.xml` 中配置 `<service>` 标签并注册 `com.google.android.gms.wearable.DATA_CHANGED` 的 `intent-filter`。
 
 ---
-> **当前状态**：方案与技术细节已确认。
-> **下一步**：您同意后，我们将立即进入 **阶段一** 与 **阶段二** 的代码修改环节。
+> **当前状态**：**100% 完工**。所有四个阶段的代码修改均已落实。
+> **附注**：实际执行中解决了 Kotlin 版本与 KAPT 的兼容问题，重构方案平稳落地。相关功能的验证方法可参考 `walkthrough.md`。

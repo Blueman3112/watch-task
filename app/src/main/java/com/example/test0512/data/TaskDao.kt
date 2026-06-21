@@ -1,33 +1,43 @@
 package com.example.test0512.data
 
-// 暂时清空以解决库冲突导致的编译错误
-/*
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.test0512.model.RadarTask
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
-    @Query("SELECT * FROM tasks ORDER BY sortOrder ASC")
-    fun getAllTasks(): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0")
+    fun getAllTasks(): Flow<List<RadarTask>>
+
+    @Query("UPDATE tasks SET isCompleted = 1, updatedAt = :updateTime WHERE id = :taskId")
+    fun markTaskAsCompleted(taskId: String, updateTime: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTask(task: TaskEntity): Long
+    fun insertTask(task: RadarTask)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTasks(tasks: List<TaskEntity>)
+    fun insertTasks(tasks: List<RadarTask>)
 
     @Update
-    suspend fun updateTask(task: TaskEntity)
+    fun updateTask(task: RadarTask)
 
-    @Delete
-    suspend fun deleteTask(task: TaskEntity)
+    @Query("UPDATE tasks SET isCompleted = 0")
+    fun uncompleteAllTasks()
 
     @Query("DELETE FROM tasks")
-    suspend fun deleteAllTasks()
+    fun deleteAllTasks()
+
+    @Query("UPDATE tasks SET isPinned = 0")
+    fun unpinAllTasks()
+
+    @Query("UPDATE tasks SET isPinned = 1 WHERE id = :taskId")
+    fun pinTask(taskId: String)
+
+    @Delete
+    fun deleteTask(task: RadarTask)
 }
-*/

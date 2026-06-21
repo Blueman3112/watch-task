@@ -2,6 +2,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.ksp)
 }
 
 android {
@@ -40,9 +41,6 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(17)
-}
 
 dependencies {
   val composeBom = platform(libs.androidx.compose.bom)
@@ -75,4 +73,9 @@ dependencies {
   // Local tests
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+
+  // Room Database
+  implementation(libs.androidx.room.runtime)
+  ksp(libs.androidx.room.compiler)
+  implementation(libs.androidx.room.ktx)
 }
