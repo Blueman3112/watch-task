@@ -55,6 +55,7 @@ data class RadarTask(
     val sortOrder: Int = 0,
     val isPinned: Boolean = false,
     val isCompleted: Boolean = false,
+    val externalId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

@@ -14,6 +14,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isCompleted = 0")
     fun getAllTasks(): Flow<List<RadarTask>>
 
+    @Query("SELECT * FROM tasks")
+    fun getAllTasksSync(): List<RadarTask>
+
     @Query("UPDATE tasks SET isCompleted = 1, updatedAt = :updateTime WHERE id = :taskId")
     fun markTaskAsCompleted(taskId: String, updateTime: Long)
 

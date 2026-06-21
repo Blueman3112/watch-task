@@ -27,6 +27,7 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.example.test0512.data.AppDatabase
 import com.example.test0512.data.TaskRepository
 import kotlinx.coroutines.delay
+import com.example.test0512.data.CalendarSyncManager
 
 class MainActivity : ComponentActivity() {
     private val viewModel: TaskViewModel by viewModels {
@@ -35,8 +36,14 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private lateinit var calendarSyncManager: CalendarSyncManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        calendarSyncManager = CalendarSyncManager(this, AppDatabase.getDatabase(this.applicationContext).taskDao())
+        calendarSyncManager.startListening()
+
         setContent {
             val tasks by viewModel.tasks.collectAsState()
             val isSystemLocked by viewModel.isSystemLocked.collectAsState()
@@ -121,7 +128,7 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             },
                             onCalendarSync = {
-                                viewModel.syncFromCalendar()
+                                calendarSyncManager.requestSync()
                                 navController.popBackStack()
                             }
                         )
@@ -158,6 +165,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        calendarSyncManager.stopListening()
     }
 }
 

@@ -31,3 +31,4 @@ plugins {
 
 rootProject.name = "watch-task"
 include(":app")
+include(":mobile")
