@@ -27,7 +27,7 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.example.test0512.data.AppDatabase
 import com.example.test0512.data.TaskRepository
 import kotlinx.coroutines.delay
-import com.example.test0512.data.CalendarSyncManager
+import com.example.test0512.data.WearTaskSyncManager
 
 class MainActivity : ComponentActivity() {
     private val viewModel: TaskViewModel by viewModels {
@@ -36,13 +36,13 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private lateinit var calendarSyncManager: CalendarSyncManager
+    private lateinit var syncManager: WearTaskSyncManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        calendarSyncManager = CalendarSyncManager(this, AppDatabase.getDatabase(this.applicationContext).taskDao())
-        calendarSyncManager.startListening()
+        syncManager = WearTaskSyncManager(this, AppDatabase.getDatabase(this.applicationContext).taskDao())
+        syncManager.startListening()
 
         setContent {
             val tasks by viewModel.tasks.collectAsState()
@@ -102,6 +102,16 @@ class MainActivity : ComponentActivity() {
                                 viewModel.restoreInitialData()
                                 navController.popBackStack()
                             },
+                            onClearAllTasks = {
+                                viewModel.clearAllTasks()
+                                syncManager.syncAllTasksToPhone()
+                                navController.popBackStack()
+                            },
+                            onGenerateSequenceData = {
+                                viewModel.generateSequenceTasks()
+                                syncManager.syncAllTasksToPhone()
+                                navController.popBackStack()
+                            },
                             onBack = { navController.popBackStack() }
                         )
                     }
@@ -121,6 +131,7 @@ class MainActivity : ComponentActivity() {
                                     timeStr
                                 }
                                 viewModel.addTask(title, desc, finalTimeStr, dueDate, priority)
+                                syncManager.syncAllTasksToPhone()
                                 navController.popBackStack()
                             },
                             onWechatImport = {
@@ -128,7 +139,7 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             },
                             onCalendarSync = {
-                                calendarSyncManager.requestSync()
+                                syncManager.syncAllTasksToPhone()
                                 navController.popBackStack()
                             }
                         )
@@ -143,17 +154,21 @@ class MainActivity : ComponentActivity() {
                                 onClose = { navController.popBackStack() },
                                 onComplete = {
                                     viewModel.completeTask(selectedTask)
+                                    syncManager.syncAllTasksToPhone()
                                     navController.popBackStack()
                                 },
                                 onPin = {
                                     viewModel.pinTaskToTop(selectedTask.id)
+                                    syncManager.syncAllTasksToPhone()
                                     navController.popBackStack()
                                 },
                                 onUpdatePriority = { newPriority ->
                                     viewModel.updateTaskPriority(selectedTask, newPriority)
+                                    syncManager.syncAllTasksToPhone()
                                 },
                                 onUpdateTime = { newTime ->
                                     viewModel.updateTaskTime(selectedTask, newTime)
+                                    syncManager.syncAllTasksToPhone()
                                 }
                             )
                         }
@@ -168,7 +183,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         super.onDestroy()
-        calendarSyncManager.stopListening()
+        syncManager.stopListening()
     }
 }
 

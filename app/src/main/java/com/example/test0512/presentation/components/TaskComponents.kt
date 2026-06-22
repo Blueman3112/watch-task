@@ -59,6 +59,7 @@ import androidx.wear.compose.foundation.rotary.rotaryScrollable
 import com.example.test0512.model.RadarTask
 import com.example.test0512.model.TaskPriority
 import com.example.test0512.model.TaskSource
+import com.example.test0512.presentation.TaskSorter
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.max
@@ -89,21 +90,7 @@ fun RadarSpiralScreen(
             rawTasks
         }
         val now = System.currentTimeMillis()
-        list.sortedWith(
-            compareByDescending<RadarTask> { it.isPinned }
-                .thenByDescending {
-                    val baseScore = when (it.priority) {
-                        TaskPriority.EMERGENCY -> 100
-                        TaskPriority.IMPORTANT -> 50
-                        TaskPriority.REGULAR -> 20
-                        TaskPriority.LONG_TERM -> 5
-                    }
-                    val timeLeft = it.dueDate?.minus(now) ?: Long.MAX_VALUE
-                    val timeMultiplier = if (timeLeft <= 0) 5.0 else if (timeLeft < 3600_000) 2.0 else 1.0
-                    (baseScore * timeMultiplier).toInt()
-                }
-                .thenByDescending { it.createdAt }
-        )
+        list.sortedWith(TaskSorter.getComparator(now))
     }
 
     val view = LocalView.current
@@ -1204,6 +1191,8 @@ fun SettingsScreen(
     onToggleSpiralLines: (Boolean) -> Unit,
     onUncompleteAll: () -> Unit,
     onRestoreInitialData: () -> Unit,
+    onClearAllTasks: () -> Unit,
+    onGenerateSequenceData: () -> Unit,
     onBack: () -> Unit
 ) {
     val listState = rememberScalingLazyListState()
@@ -1306,6 +1295,24 @@ fun SettingsScreen(
                 fgColor = Color.White,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 onClick = onRestoreInitialData
+            )
+        }
+        item {
+            CompactActionButton(
+                text = "清空所有数据",
+                bgColor = Color(0xFFD32F2F),
+                fgColor = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = onClearAllTasks
+            )
+        }
+        item {
+            CompactActionButton(
+                text = "置为序号数据",
+                bgColor = Color(0xFF673AB7),
+                fgColor = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = onGenerateSequenceData
             )
         }
         item {

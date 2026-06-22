@@ -1,4 +1,4 @@
-package com.example.test0512.data
+package com.example.test0512.mobile.data
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -6,7 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
-import com.example.test0512.model.RadarTask
+import com.example.test0512.mobile.model.RadarTask
 import kotlinx.coroutines.flow.Flow
 
 @Dao

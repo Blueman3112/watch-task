@@ -47,11 +47,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         private set
 
     val tasks: StateFlow<List<RadarTask>> = combine(repository.allTasks, tickerFlow) { list, now ->
-        list.sortedWith(
-            compareByDescending<RadarTask> { it.isPinned }
-                .thenByDescending { calculateUrgencyScore(it, now) }
-                .thenByDescending { it.createdAt }
-        )
+        list.sortedWith(TaskSorter.getComparator(now))
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -59,7 +55,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
     )
 
     val isSystemLocked: StateFlow<Boolean> = tasks
-        .map { list -> list.isNotEmpty() && calculateUrgencyScore(list.first(), System.currentTimeMillis()) >= 500 }
+        .map { list -> list.isNotEmpty() && TaskSorter.calculateUrgencyScore(list.first(), System.currentTimeMillis()) >= 500 }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -80,6 +76,13 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         }
     }
 
+    fun clearAllTasks() {
+        optimisticPinnedId = null
+        viewModelScope.launch {
+            repository.deleteAllTasks()
+        }
+    }
+
     fun pinTaskToTop(taskId: String) {
         optimisticPinnedId = taskId
         viewModelScope.launch {
@@ -87,31 +90,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         }
     }
 
-    private fun calculateUrgencyScore(task: RadarTask, now: Long): Int {
-        val baseScore = when (task.priority) {
-            TaskPriority.EMERGENCY -> 300
-            TaskPriority.IMPORTANT -> 200
-            TaskPriority.REGULAR -> 100
-            TaskPriority.LONG_TERM -> 0
-        }
-        
-        val timeFactor = if (task.dueDate != null) {
-            val timeLeftHours = (task.dueDate - now) / 3600_000.0
-            if (timeLeftHours < 0) {
-                500 + (-timeLeftHours * 10).toInt()
-            } else {
-                if (timeLeftHours > 72) {
-                    0
-                } else {
-                    ((72 - timeLeftHours) * (400.0 / 72.0)).toInt()
-                }
-            }
-        } else {
-            0
-        }
-        
-        return baseScore + timeFactor
-    }
+
 
     fun addTask(title: String, description: String, time: String, dueDate: Long?, priority: TaskPriority, source: TaskSource = TaskSource.MANUAL) {
         viewModelScope.launch {
@@ -128,6 +107,54 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
                 updatedAt = System.currentTimeMillis()
             )
             repository.insertTask(newTask)
+        }
+    }
+
+    fun generateSequenceTasks() {
+        viewModelScope.launch {
+            repository.deleteAllTasks()
+            val now = System.currentTimeMillis()
+            val priorities = listOf(
+                TaskPriority.EMERGENCY,
+                TaskPriority.IMPORTANT,
+                TaskPriority.REGULAR,
+                TaskPriority.LONG_TERM
+            )
+            
+            val random = java.util.Random()
+            val generatedTasks = mutableListOf<RadarTask>()
+            for (i in 0..7) {
+                val priority = priorities[i % priorities.size]
+                val offsetMs = random.nextInt(86400000).toLong() // Within 24h
+                val dueDateMs = now + offsetMs
+                
+                val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+                val timeStr = sdf.format(java.util.Date(dueDateMs))
+                
+                val newTask = RadarTask(
+                    id = java.util.UUID.randomUUID().toString(),
+                    title = "", // Temporary
+                    description = "",
+                    time = timeStr,
+                    dueDate = dueDateMs,
+                    priority = priority,
+                    source = com.example.test0512.model.TaskSource.MANUAL,
+                    isPinned = false,
+                    isCompleted = false,
+                    createdAt = now + i,
+                    updatedAt = now + i,
+                    sortOrder = 0
+                )
+                generatedTasks.add(newTask)
+            }
+
+            // Sort them using the same logic as rendering
+            val sortedTasks = generatedTasks.sortedWith(TaskSorter.getComparator(now))
+
+            // Update title to be the direct sequence number and insert into DB
+            sortedTasks.forEachIndexed { index, task ->
+                repository.insertTask(task.copy(title = index.toString()))
+            }
         }
     }
 

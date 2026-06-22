@@ -1,7 +1,7 @@
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
-
+  id("com.google.devtools.ksp")
 }
 
 android {
@@ -39,5 +39,10 @@ dependencies {
   
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.material3)
+  implementation("androidx.compose.material:material-icons-extended")
   implementation(libs.play.services.wearable)
+  implementation(libs.androidx.room.runtime)
+  ksp(libs.androidx.room.compiler)
+  implementation(libs.androidx.room.ktx)
+  implementation("com.google.code.gson:gson:2.10.1")
 }
