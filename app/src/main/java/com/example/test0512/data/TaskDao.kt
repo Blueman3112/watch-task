@@ -17,8 +17,8 @@ interface TaskDao {
     @Query("SELECT * FROM tasks")
     fun getAllTasksSync(): List<RadarTask>
 
-    @Query("UPDATE tasks SET isCompleted = 1, updatedAt = :updateTime WHERE id = :taskId")
-    fun markTaskAsCompleted(taskId: String, updateTime: Long)
+    @Query("UPDATE tasks SET isCompleted = 1, updatedAt = MAX(:updateTime, updatedAt + 1) WHERE id = :taskId")
+    fun markTaskAsCompleted(taskId: String, updateTime: Long = System.currentTimeMillis())
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTask(task: RadarTask)
@@ -35,14 +35,14 @@ interface TaskDao {
     @Query("DELETE FROM tasks")
     fun deleteAllTasks()
 
-    @Query("UPDATE tasks SET isPinned = 0")
-    fun unpinAllTasks()
+    @Query("UPDATE tasks SET isPinned = 0, updatedAt = MAX(:updateTime, updatedAt + 1) WHERE isPinned = 1")
+    fun unpinAllTasks(updateTime: Long = System.currentTimeMillis())
 
-    @Query("UPDATE tasks SET isPinned = 1, updatedAt = :updateTime WHERE id = :taskId")
+    @Query("UPDATE tasks SET isPinned = 1, updatedAt = MAX(:updateTime, updatedAt + 1) WHERE id = :taskId")
     fun pinTask(taskId: String, updateTime: Long = System.currentTimeMillis())
 
-    @Query("UPDATE tasks SET isDeleted = 1, updatedAt = :updateTime WHERE id = :taskId")
-    fun softDeleteTask(taskId: String, updateTime: Long)
+    @Query("UPDATE tasks SET isDeleted = 1, updatedAt = MAX(:updateTime, updatedAt + 1) WHERE id = :taskId")
+    fun softDeleteTask(taskId: String, updateTime: Long = System.currentTimeMillis())
 
     @Delete
     fun deleteTask(task: RadarTask)

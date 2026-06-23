@@ -44,6 +44,10 @@ class MainActivity : ComponentActivity() {
         syncManager = WearTaskSyncManager(this, AppDatabase.getDatabase(this.applicationContext).taskDao())
         syncManager.startListening()
 
+        viewModel.onDatabaseChanged = {
+            syncManager.syncAllTasksToPhone()
+        }
+
         setContent {
             val tasks by viewModel.tasks.collectAsState()
             val isSystemLocked by viewModel.isSystemLocked.collectAsState()
@@ -104,12 +108,14 @@ class MainActivity : ComponentActivity() {
                             },
                             onClearAllTasks = {
                                 viewModel.clearAllTasks()
-                                syncManager.syncAllTasksToPhone()
                                 navController.popBackStack()
                             },
                             onGenerateSequenceData = {
                                 viewModel.generateSequenceTasks()
-                                syncManager.syncAllTasksToPhone()
+                                navController.popBackStack()
+                            },
+                            onPerformTwoWaySync = {
+                                syncManager.performTwoWaySync()
                                 navController.popBackStack()
                             },
                             onBack = { navController.popBackStack() }
@@ -131,7 +137,6 @@ class MainActivity : ComponentActivity() {
                                     timeStr
                                 }
                                 viewModel.addTask(title, desc, finalTimeStr, dueDate, priority)
-                                syncManager.syncAllTasksToPhone()
                                 navController.popBackStack()
                             },
                             onWechatImport = {
@@ -139,7 +144,7 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             },
                             onCalendarSync = {
-                                syncManager.syncAllTasksToPhone()
+                                syncManager.performTwoWaySync()
                                 navController.popBackStack()
                             }
                         )
@@ -154,21 +159,17 @@ class MainActivity : ComponentActivity() {
                                 onClose = { navController.popBackStack() },
                                 onComplete = {
                                     viewModel.completeTask(selectedTask)
-                                    syncManager.syncAllTasksToPhone()
                                     navController.popBackStack()
                                 },
                                 onPin = {
                                     viewModel.pinTaskToTop(selectedTask.id)
-                                    syncManager.syncAllTasksToPhone()
                                     navController.popBackStack()
                                 },
                                 onUpdatePriority = { newPriority ->
                                     viewModel.updateTaskPriority(selectedTask, newPriority)
-                                    syncManager.syncAllTasksToPhone()
                                 },
                                 onUpdateTime = { newTime ->
                                     viewModel.updateTaskTime(selectedTask, newTime)
-                                    syncManager.syncAllTasksToPhone()
                                 }
                             )
                         }

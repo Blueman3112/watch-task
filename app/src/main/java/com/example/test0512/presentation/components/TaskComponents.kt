@@ -300,7 +300,7 @@ fun RadarSpiralScreen(
             drawPath(helperPath, color = baseTeal.copy(alpha = 0.08f), style = Stroke(width = 1f))
         }
 
-        if (tasks.isEmpty()) return@Canvas
+        // REMOVED early return: if (tasks.isEmpty()) return@Canvas
 
         for (i in (tasks.size - 1) downTo 1) {
             val currentTask = tasks[i]
@@ -360,7 +360,15 @@ fun RadarSpiralScreen(
             drawCircle(color = nodeColor, radius = nodeRadius, center = pos)
         }
 
-        if (isTopMode) {
+        if (tasks.isEmpty()) {
+            val coreRed = Color(0xFFFF5252)
+            drawCircle(
+                color = coreRed.copy(alpha = 0.6f * pulseScale),
+                radius = 18f * (0.8f + 0.2f * breathingUrgent),
+                center = Offset(centerX, centerY),
+                style = Stroke(width = 2f)
+            )
+        } else if (isTopMode) {
             tasks.getOrNull(topCursorIndex)?.let { hoveredTask ->
                 val priorityColor = if (hoveredTask.priority == TaskPriority.EMERGENCY) Color(0xFFFF5252) else baseTeal
                 val prioLayout = textMeasurer.measure("· ${hoveredTask.priority.label} ·", TextStyle(color = priorityColor, fontSize = 12.sp, fontWeight = FontWeight.Bold))
@@ -1193,6 +1201,7 @@ fun SettingsScreen(
     onRestoreInitialData: () -> Unit,
     onClearAllTasks: () -> Unit,
     onGenerateSequenceData: () -> Unit,
+    onPerformTwoWaySync: () -> Unit,
     onBack: () -> Unit
 ) {
     val listState = rememberScalingLazyListState()
@@ -1286,6 +1295,15 @@ fun SettingsScreen(
                 fgColor = Color.White,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 onClick = onUncompleteAll
+            )
+        }
+        item {
+            CompactActionButton(
+                text = "与手机强制同步",
+                bgColor = Color(0xFF1E88E5),
+                fgColor = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = onPerformTwoWaySync
             )
         }
         item {

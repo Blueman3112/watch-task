@@ -44,4 +44,12 @@ class WearSyncService : WearableListenerService() {
             }
         }
     }
+
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        if (messageEvent.path == "/request_sync") {
+            Log.d("WearSyncService", "Received sync request from watch, pushing local data...")
+            val taskDao = AppDatabase.getDatabase(this.applicationContext).taskDao()
+            MobileTaskSyncManager(this, taskDao).syncAllTasksToWatch()
+        }
+    }
 }

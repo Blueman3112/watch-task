@@ -10,6 +10,7 @@ import com.example.test0512.data.TaskRepository
 import com.example.test0512.model.RadarTask
 import com.example.test0512.model.TaskPriority
 import com.example.test0512.model.TaskSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
@@ -18,11 +19,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
     var pinnedNotification by mutableStateOf<String?>(null)
     
+    var onDatabaseChanged: (() -> Unit)? = null
+
     var isListViewEnabled by mutableStateOf(false)
         private set
 
@@ -66,6 +70,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         optimisticPinnedId = null
         viewModelScope.launch {
             repository.uncompleteAllTasks()
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
@@ -73,6 +78,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         optimisticPinnedId = null
         viewModelScope.launch {
             repository.restoreInitialData()
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
@@ -80,6 +86,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         optimisticPinnedId = null
         viewModelScope.launch {
             repository.deleteAllTasks()
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
@@ -87,6 +94,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         optimisticPinnedId = taskId
         viewModelScope.launch {
             repository.pinTask(taskId)
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
@@ -107,6 +115,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
                 updatedAt = System.currentTimeMillis()
             )
             repository.insertTask(newTask)
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
@@ -155,6 +164,7 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
             sortedTasks.forEachIndexed { index, task ->
                 repository.insertTask(task.copy(title = index.toString()))
             }
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
@@ -182,19 +192,22 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
 
     fun updateTaskPriority(task: RadarTask, newPriority: TaskPriority) {
         viewModelScope.launch {
-            repository.updateTask(task.copy(priority = newPriority, updatedAt = System.currentTimeMillis()))
+            repository.updateTask(task.copy(priority = newPriority, updatedAt = maxOf(System.currentTimeMillis(), task.updatedAt + 1)))
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
     fun updateTaskTime(task: RadarTask, newTime: String) {
         viewModelScope.launch {
-            repository.updateTask(task.copy(time = newTime, updatedAt = System.currentTimeMillis()))
+            repository.updateTask(task.copy(time = newTime, updatedAt = maxOf(System.currentTimeMillis(), task.updatedAt + 1)))
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 
     fun completeTask(task: RadarTask) {
         viewModelScope.launch {
-            repository.updateTask(task.copy(isCompleted = true, updatedAt = System.currentTimeMillis()))
+            repository.updateTask(task.copy(isCompleted = true, updatedAt = maxOf(System.currentTimeMillis(), task.updatedAt + 1)))
+            withContext(Dispatchers.Main) { onDatabaseChanged?.invoke() }
         }
     }
 

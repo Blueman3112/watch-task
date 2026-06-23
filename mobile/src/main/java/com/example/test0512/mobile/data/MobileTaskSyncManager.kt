@@ -44,6 +44,37 @@ class MobileTaskSyncManager(
         }
     }
 
+    fun sendClearAllToWatch() {
+        Wearable.getNodeClient(context).connectedNodes.addOnSuccessListener { nodes ->
+            nodes.forEach { node ->
+                Wearable.getMessageClient(context).sendMessage(node.id, "/clear_all", ByteArray(0))
+                    .addOnSuccessListener {
+                        Log.d("MobileTaskSyncManager", "Successfully sent clear_all request to watch: ${node.id}")
+                    }.addOnFailureListener {
+                        Log.e("MobileTaskSyncManager", "Failed to send clear_all request", it)
+                    }
+            }
+        }
+    }
+
+    private fun requestSyncFromWatch() {
+        Wearable.getNodeClient(context).connectedNodes.addOnSuccessListener { nodes ->
+            nodes.forEach { node ->
+                Wearable.getMessageClient(context).sendMessage(node.id, "/request_sync", ByteArray(0))
+                    .addOnSuccessListener {
+                        Log.d("MobileTaskSyncManager", "Successfully sent sync request to watch: ${node.id}")
+                    }.addOnFailureListener {
+                        Log.e("MobileTaskSyncManager", "Failed to send sync request", it)
+                    }
+            }
+        }
+    }
+
+    fun performTwoWaySync() {
+        syncAllTasksToWatch()
+        requestSyncFromWatch()
+    }
+
     suspend fun processIncomingTasks(jsonStr: String) {
         try {
             val listType = object : TypeToken<List<RadarTask>>() {}.type

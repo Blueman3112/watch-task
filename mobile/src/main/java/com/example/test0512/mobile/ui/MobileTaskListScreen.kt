@@ -10,7 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +56,11 @@ fun MobileTaskListScreen(
         }.addOnFailureListener {
             isConnected = false
         }
+        
+        // Auto-sync after local DB modifications
+        viewModel.onDatabaseChanged = {
+            syncManager.syncAllTasksToWatch()
+        }
     }
 
     if (showSyncPrompt) {
@@ -65,9 +71,9 @@ fun MobileTaskListScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        syncManager.syncAllTasksToWatch()
+                        syncManager.performTwoWaySync()
                         showSyncPrompt = false
-                        Toast.makeText(context, "已触发同步", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "已触发双向同步", Toast.LENGTH_SHORT).show()
                     }
                 ) {
                     Text("同步")
@@ -100,10 +106,30 @@ fun MobileTaskListScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         // Manual Sync Button
                         IconButton(onClick = { 
-                            syncManager.syncAllTasksToWatch()
-                            Toast.makeText(context, "已触发同步", Toast.LENGTH_SHORT).show()
+                            syncManager.performTwoWaySync()
+                            Toast.makeText(context, "正在双向同步...", Toast.LENGTH_SHORT).show()
                         }) {
                             Icon(Icons.Default.Sync, contentDescription = "Sync to Watch")
+                        }
+                        val scope = rememberCoroutineScope()
+                        // Clear All Button (For Testing)
+                        IconButton(onClick = { 
+                            syncManager.sendClearAllToWatch()
+                            viewModel.clearAllTasks()
+                            Toast.makeText(context, "已清空本地数据库", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Clear All", tint = Color(0xFFE53935))
+                        }
+                        // Import 11 dummy tasks
+                        IconButton(onClick = {
+                            scope.launch {
+                                syncManager.sendClearAllToWatch()
+                                kotlinx.coroutines.delay(500)
+                                viewModel.importDummyTasks(11)
+                                Toast.makeText(context, "已导入 11 条测试数据并同步", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(Icons.Default.LibraryAdd, contentDescription = "Import Test Data", tint = Color(0xFF1E88E5))
                         }
                     }
                 },
@@ -130,25 +156,17 @@ fun MobileTaskListScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val sortedTasks = tasks.sortedWith(
-                compareByDescending<RadarTask> { it.isPinned }
-                    .thenBy { it.dueDate ?: Long.MAX_VALUE }
-            )
-
-            items(sortedTasks, key = { it.id }) { task ->
+            items(tasks, key = { it.id }) { task ->
                 TaskItem(
                     task = task,
                     onComplete = {
                         viewModel.completeTask(task.id)
-                        syncManager.syncAllTasksToWatch()
                     },
                     onDelete = {
                         viewModel.deleteTask(task)
-                        syncManager.syncAllTasksToWatch()
                     },
                     onPin = {
                         viewModel.pinTask(task.id)
-                        syncManager.syncAllTasksToWatch()
                     }
                 )
             }
@@ -159,7 +177,6 @@ fun MobileTaskListScreen(
                 onDismiss = { showAddDialog = false },
                 onSave = { title, desc, timeStr, dueDate, priority ->
                     viewModel.addTask(title, desc, timeStr, dueDate, priority)
-                    syncManager.syncAllTasksToWatch()
                     showAddDialog = false
                     Toast.makeText(context, "已同步至手表", Toast.LENGTH_SHORT).show()
                 }
@@ -310,9 +327,9 @@ fun TaskItem(
                 }
                 IconButton(onClick = onPin) {
                     Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Pin",
-                        tint = if (task.isPinned) Color(0xFFFFC107) else Color.Gray
+                        imageVector = Icons.Default.KeyboardArrowUp,
+                        contentDescription = "Top",
+                        tint = if (task.isPinned) Color(0xFFFFB300) else Color.Gray
                     )
                 }
             }

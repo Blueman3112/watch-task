@@ -56,6 +56,24 @@ class WearTaskSyncManager(
         }
     }
 
+    private fun requestSyncFromPhone() {
+        Wearable.getNodeClient(context).connectedNodes.addOnSuccessListener { nodes ->
+            nodes.forEach { node ->
+                Wearable.getMessageClient(context).sendMessage(node.id, "/request_sync", ByteArray(0))
+                    .addOnSuccessListener {
+                        Log.d("WearTaskSyncManager", "Successfully sent sync request to phone: ${node.id}")
+                    }.addOnFailureListener {
+                        Log.e("WearTaskSyncManager", "Failed to send sync request", it)
+                    }
+            }
+        }
+    }
+
+    fun performTwoWaySync() {
+        syncAllTasksToPhone()
+        requestSyncFromPhone()
+    }
+
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         dataEvents.forEach { event ->
             if (event.type == DataEvent.TYPE_CHANGED && event.dataItem.uri.path == "/sync_tasks") {

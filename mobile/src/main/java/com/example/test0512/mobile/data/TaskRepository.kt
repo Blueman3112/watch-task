@@ -21,6 +21,12 @@ class TaskRepository(private val taskDao: TaskDao) {
         }
     }
 
+    suspend fun clearAllTasks() {
+        withContext(Dispatchers.IO) {
+            taskDao.deleteAllTasks()
+        }
+    }
+
     suspend fun restoreInitialData() {
         withContext(Dispatchers.IO) {
             taskDao.deleteAllTasks()

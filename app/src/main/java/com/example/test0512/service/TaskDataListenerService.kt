@@ -56,4 +56,16 @@ class TaskDataListenerService : WearableListenerService() {
             }
         }
     }
+
+    override fun onMessageReceived(messageEvent: com.google.android.gms.wearable.MessageEvent) {
+        val db = AppDatabase.getDatabase(applicationContext)
+        if (messageEvent.path == "/request_sync") {
+            val syncManager = com.example.test0512.data.WearTaskSyncManager(applicationContext, db.taskDao())
+            syncManager.syncAllTasksToPhone()
+        } else if (messageEvent.path == "/clear_all") {
+            scope.launch {
+                db.taskDao().deleteAllTasks()
+            }
+        }
+    }
 }
