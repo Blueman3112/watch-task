@@ -53,10 +53,13 @@ class MainActivity : ComponentActivity() {
         // Start Foreground Service
         com.example.test0512.mobile.network.LocalSyncForegroundService.start(this)
 
-        val neededPermissions = arrayOf(
+        val neededPermissions = mutableListOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR
         )
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
         val missingPermissions = neededPermissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }

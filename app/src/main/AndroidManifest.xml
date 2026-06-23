@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- 硬件特性声明：指明这是一个 Wear OS（手表）应用，系统会据此在应用商店进行过滤 -->
     <uses-feature android:name="android.hardware.type.watch" />
