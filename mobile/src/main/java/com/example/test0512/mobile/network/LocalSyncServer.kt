@@ -14,7 +14,9 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.util.Collections
@@ -30,6 +32,9 @@ class LocalSyncServer(private val taskDao: TaskDao) {
     private val _incomingTasksFlow = MutableSharedFlow<List<RadarTask>>()
     val incomingTasksFlow = _incomingTasksFlow.asSharedFlow()
 
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected = _isConnected.asStateFlow()
+
     fun startServer(port: Int = 8080) {
         if (server != null) return
         
@@ -44,6 +49,7 @@ class LocalSyncServer(private val taskDao: TaskDao) {
                 webSocket("/sync") {
                     Log.d("LocalSyncServer", "Client connected: ${call.request.local.remoteAddress}")
                     connections.add(this)
+                    _isConnected.value = connections.isNotEmpty()
                     
                     try {
                         // Immediately send all current tasks to the newly connected client
@@ -61,6 +67,7 @@ class LocalSyncServer(private val taskDao: TaskDao) {
                     } finally {
                         Log.d("LocalSyncServer", "Client disconnected: ${call.request.local.remoteAddress}")
                         connections.remove(this)
+                        _isConnected.value = connections.isNotEmpty()
                     }
                 }
             }

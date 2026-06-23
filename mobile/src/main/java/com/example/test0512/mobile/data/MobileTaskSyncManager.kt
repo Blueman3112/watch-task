@@ -18,6 +18,8 @@ class MobileTaskSyncManager(
     private val scope = CoroutineScope(Dispatchers.IO)
     private val gson = Gson()
 
+    val isConnected = localSyncServer.isConnected
+
     fun syncAllTasksToWatch() {
         scope.launch {
             try {

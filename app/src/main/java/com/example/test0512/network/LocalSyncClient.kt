@@ -14,6 +14,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -27,17 +29,18 @@ class LocalSyncClient(private val taskDao: TaskDao) {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val gson = Gson()
     private var connectJob: Job? = null
-    private var isConnected = false
+    private val _connectionState = MutableStateFlow(false)
+    val connectionState = _connectionState.asStateFlow()
 
     fun connect(host: String, port: Int) {
-        if (isConnected) return
+        if (_connectionState.value) return
         connectJob?.cancel()
         connectJob = scope.launch {
-            while (isActive && !isConnected) {
+            while (isActive && !_connectionState.value) {
                 try {
                     Log.d("LocalSyncClient", "Attempting to connect to ws://$host:$port/sync")
                     client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/sync") {
-                        isConnected = true
+                        _connectionState.value = true
                         session = this
                         Log.d("LocalSyncClient", "Connected successfully")
                         
@@ -52,7 +55,7 @@ class LocalSyncClient(private val taskDao: TaskDao) {
                 } catch (e: Exception) {
                     Log.e("LocalSyncClient", "Connection error", e)
                 } finally {
-                    isConnected = false
+                    _connectionState.value = false
                     session = null
                     Log.d("LocalSyncClient", "Disconnected, retrying in 5 seconds...")
                     delay(5000)
@@ -130,7 +133,7 @@ class LocalSyncClient(private val taskDao: TaskDao) {
         scope.launch {
             session?.close(CloseReason(CloseReason.Codes.NORMAL, "Client disconnected"))
             session = null
-            isConnected = false
+            _connectionState.value = false
         }
     }
 }

@@ -29,7 +29,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-import com.google.android.gms.wearable.Wearable
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Watch
 
@@ -43,20 +42,16 @@ fun MobileTaskListScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
-    var isConnected by remember { mutableStateOf(false) }
+    val isConnected by syncManager.isConnected.collectAsState()
     var showSyncPrompt by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        val nodeClient = Wearable.getNodeClient(context)
-        nodeClient.connectedNodes.addOnSuccessListener { nodes ->
-            isConnected = nodes.isNotEmpty()
-            if (isConnected) {
-                showSyncPrompt = true
-            }
-        }.addOnFailureListener {
-            isConnected = false
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            showSyncPrompt = true
         }
-        
+    }
+
+    LaunchedEffect(Unit) {
         // Auto-sync after local DB modifications
         viewModel.onDatabaseChanged = {
             syncManager.syncAllTasksToWatch()
@@ -102,6 +97,13 @@ fun MobileTaskListScreen(
                             contentDescription = "Watch Status",
                             tint = if (isConnected) Color(0xFF4CAF50) else Color.Gray,
                             modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isConnected) "已连接" else "未连接",
+                            color = if (isConnected) Color(0xFF4CAF50) else Color.Gray,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         // Manual Sync Button

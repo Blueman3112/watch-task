@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
             val tasks by viewModel.tasks.collectAsState()
             val isSystemLocked by viewModel.isSystemLocked.collectAsState()
             val pinnedNotification = viewModel.pinnedNotification
+            val isConnected by syncClient.connectionState.collectAsState()
             val navController = rememberSwipeDismissableNavController()
 
             LaunchedEffect(pinnedNotification) {
@@ -198,6 +199,9 @@ class MainActivity : ComponentActivity() {
                 if (pinnedNotification != null) {
                     PinnedNotificationView(pinnedNotification)
                 }
+
+                // Connection Status Indicator
+                ConnectionStatusView(isConnected = isConnected)
             }
         }
     }
@@ -224,6 +228,25 @@ fun PinnedNotificationView(message: String) {
             modifier = Modifier
                 .background(Color(0xFF4DB6AC), shape = RoundedCornerShape(12.dp))
                 .padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+fun ConnectionStatusView(isConnected: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(
+                    if (isConnected) Color(0xFF4CAF50) else Color.Red,
+                    shape = RoundedCornerShape(50)
+                )
         )
     }
 }
