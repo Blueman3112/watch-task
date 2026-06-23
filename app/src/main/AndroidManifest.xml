@@ -26,7 +26,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault">
+        android:theme="@android:style/Theme.DeviceDefault"
+        android:usesCleartextTraffic="true">
         
         <!-- Wear OS 必须库：声明应用依赖于 Google 的 Wearable 共享库 -->
         <uses-library
