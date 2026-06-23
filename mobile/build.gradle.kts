@@ -45,4 +45,8 @@ dependencies {
   ksp(libs.androidx.room.compiler)
   implementation(libs.androidx.room.ktx)
   implementation("com.google.code.gson:gson:2.10.1")
+
+  implementation(libs.ktor.server.core)
+  implementation(libs.ktor.server.netty)
+  implementation(libs.ktor.server.websockets)
 }

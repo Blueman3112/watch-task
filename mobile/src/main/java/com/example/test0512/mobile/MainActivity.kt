@@ -20,6 +20,7 @@ import com.example.test0512.mobile.model.RadarTask
 import com.example.test0512.mobile.model.TaskPriority
 import com.example.test0512.mobile.model.TaskSource
 import com.example.test0512.mobile.ui.MobileTaskListScreen
+import com.example.test0512.mobile.network.SyncProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -46,7 +47,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         val taskDao = AppDatabase.getDatabase(this.applicationContext).taskDao()
-        syncManager = MobileTaskSyncManager(this, taskDao)
+        SyncProvider.init(this.applicationContext, taskDao)
+        syncManager = SyncProvider.syncManager
+        
+        // Start Foreground Service
+        com.example.test0512.mobile.network.LocalSyncForegroundService.start(this)
 
         val neededPermissions = arrayOf(
             Manifest.permission.READ_CALENDAR,

@@ -1,4 +1,4 @@
-package com.example.test0512.service
+package com.example.test0512.mobile.network
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -8,26 +8,30 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.example.test0512.data.AppDatabase
-import com.example.test0512.network.LocalSyncClient
-import com.example.test0512.network.NsdClientDiscovery
+import com.example.test0512.mobile.data.AppDatabase
+import com.example.test0512.mobile.data.MobileTaskSyncManager
 
-class TaskDataListenerService : Service() {
+class LocalSyncForegroundService : Service() {
 
-    private lateinit var syncClient: LocalSyncClient
-    private lateinit var nsdDiscovery: NsdClientDiscovery
+    private lateinit var syncServer: LocalSyncServer
+    private lateinit var nsdManager: NsdServerManager
+    lateinit var syncManager: MobileTaskSyncManager
+        private set
 
     companion object {
-        private const val CHANNEL_ID = "WatchSyncChannel"
-        private const val NOTIFICATION_ID = 2
+        private const val CHANNEL_ID = "LocalSyncChannel"
+        private const val NOTIFICATION_ID = 1
 
+        var instance: LocalSyncForegroundService? = null
+            private set
+            
         fun start(context: Context) {
-            val intent = Intent(context, TaskDataListenerService::class.java)
+            val intent = Intent(context, LocalSyncForegroundService::class.java)
             context.startForegroundService(intent)
         }
-
+        
         fun stop(context: Context) {
-            val intent = Intent(context, TaskDataListenerService::class.java)
+            val intent = Intent(context, LocalSyncForegroundService::class.java)
             context.stopService(intent)
         }
     }
@@ -36,21 +40,26 @@ class TaskDataListenerService : Service() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
-
+        
         val taskDao = AppDatabase.getDatabase(applicationContext).taskDao()
-        com.example.test0512.network.SyncProvider.init(applicationContext, taskDao)
-        syncClient = com.example.test0512.network.SyncProvider.syncClient
-        nsdDiscovery = NsdClientDiscovery(applicationContext)
+        SyncProvider.init(applicationContext, taskDao)
+        
+        syncServer = SyncProvider.syncServer
+        syncManager = SyncProvider.syncManager
+        nsdManager = NsdServerManager(this)
 
-        nsdDiscovery.discoverServices { host, port ->
-            syncClient.connect(host, port)
-        }
+        val port = 8080
+        syncServer.startServer(port)
+        nsdManager.registerService(port)
+        
+        instance = this
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        nsdDiscovery.stopDiscovery()
-        syncClient.disconnect()
+        nsdManager.tearDown()
+        syncServer.stopServer()
+        instance = null
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -60,7 +69,7 @@ class TaskDataListenerService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Watch Sync Service",
+            "Local Sync Service",
             NotificationManager.IMPORTANCE_LOW
         )
         val manager = getSystemService(NotificationManager::class.java)
@@ -69,9 +78,8 @@ class TaskDataListenerService : Service() {
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("WatchTask")
+            .setContentTitle("WatchTask Bridge")
             .setContentText("局域网同步服务运行中")
-            // Use a default icon since we don't know if specific icons exist
             .setSmallIcon(android.R.drawable.ic_popup_sync)
             .build()
     }

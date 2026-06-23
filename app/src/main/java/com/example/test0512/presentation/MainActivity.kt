@@ -27,8 +27,9 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.example.test0512.data.AppDatabase
 import com.example.test0512.data.TaskRepository
 import kotlinx.coroutines.delay
-import com.example.test0512.data.WearTaskSyncManager
-
+import com.example.test0512.network.SyncProvider
+import com.example.test0512.network.LocalSyncClient
+import com.example.test0512.service.TaskDataListenerService
 class MainActivity : ComponentActivity() {
     private val viewModel: TaskViewModel by viewModels {
         TaskViewModel.Factory(
@@ -36,16 +37,19 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private lateinit var syncManager: WearTaskSyncManager
+    private lateinit var syncClient: LocalSyncClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        syncManager = WearTaskSyncManager(this, AppDatabase.getDatabase(this.applicationContext).taskDao())
-        syncManager.startListening()
+        val taskDao = AppDatabase.getDatabase(this.applicationContext).taskDao()
+        SyncProvider.init(this.applicationContext, taskDao)
+        syncClient = SyncProvider.syncClient
+        
+        TaskDataListenerService.start(this)
 
         viewModel.onDatabaseChanged = {
-            syncManager.syncAllTasksToPhone()
+            syncClient.syncAllTasksToPhone()
         }
 
         setContent {
@@ -115,7 +119,7 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             },
                             onPerformTwoWaySync = {
-                                syncManager.performTwoWaySync()
+                                syncClient.requestSync()
                                 navController.popBackStack()
                             },
                             onBack = { navController.popBackStack() }
@@ -144,7 +148,7 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             },
                             onCalendarSync = {
-                                syncManager.performTwoWaySync()
+                                syncClient.requestSync()
                                 navController.popBackStack()
                             }
                         )
@@ -184,7 +188,6 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         super.onDestroy()
-        syncManager.stopListening()
     }
 }
 

@@ -11,6 +11,11 @@
 
     <!-- 权限声明：允许程序在屏幕关闭后后台进程仍然运行，防止 CPU 进入休眠状态 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- 硬件特性声明：指明这是一个 Wear OS（手表）应用，系统会据此在应用商店进行过滤 -->
     <uses-feature android:name="android.hardware.type.watch" />
@@ -49,16 +54,8 @@
 
         <service
             android:name=".service.TaskDataListenerService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
-                <data android:scheme="wear" android:host="*" android:pathPrefix="/new_task" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-                <data android:scheme="wear" android:host="*" android:pathPrefix="/request_sync" />
-                <data android:scheme="wear" android:host="*" android:pathPrefix="/clear_all" />
-            </intent-filter>
+            android:foregroundServiceType="dataSync"
+            android:exported="false">
         </service>
     </application>
 
